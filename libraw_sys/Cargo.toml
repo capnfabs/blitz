@@ -1,0 +1,10 @@
+[package]
+name = "libraw_sys"
+version = "0.1.0"
+authors = ["Fabian Tamp <fabian.tamp@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.42.2"

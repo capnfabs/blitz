@@ -34,6 +34,18 @@ fn with_err_conversion<F>(f: F) -> Result<(), &'static str> where
         }
     }
 
+pub fn test_drive() {
+    unsafe {
+        let libraw = libraw_init(0);
+        let filename = CString::new("/Users/fabian/Pictures/2018/2018-12-02/ROFL6244.RAF").unwrap();
+        libraw_open_file(libraw, filename.as_ptr());
+        libraw_unpack_thumb(libraw);
+        libraw_unpack(libraw);
+        println!("{:?}", libraw);
+    }
+
+}
+
 impl RawFile {
     pub fn new(filename: String) -> Result<RawFile, & 'static str> {
         unsafe {
@@ -49,8 +61,8 @@ impl RawFile {
             unpack_thumb(self.libraw).unwrap();
             let thumb = &(*self.libraw).thumbnail;
             let format_code = &thumb.tformat;
-            match format_code {
-                LibRaw_thumbnail_formats::LIBRAW_THUMBNAIL_JPEG => (),
+            match *format_code {
+                LibRaw_thumbnail_formats_LIBRAW_THUMBNAIL_JPEG => (),
                 _ => panic!("Expected JPEG thumbnail format"),
             }
             println!("size: {}", thumb.tlength);
@@ -66,5 +78,15 @@ impl Drop for RawFile {
             // TODO: unclear if we need libraw_recycle here too.
             libraw_close(self.libraw);
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
     }
 }
