@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 clap = "2.33.0"
 libraw = {path = "../libraw" }
+image = "0.22.4"
