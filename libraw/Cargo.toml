@@ -1,5 +1,5 @@
 [package]
-name = "blitz"
+name = "libraw"
 version = "0.1.0"
 authors = ["Fabian Tamp <fabian.tamp@gmail.com>"]
 edition = "2018"
@@ -7,5 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = "2.33.0"
-libraw = {path = "../libraw" }
+libraw-sys = { path = "../libraw-sys" }
+quick-error = "1.2.3"

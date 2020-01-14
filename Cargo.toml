@@ -3,4 +3,5 @@
 members = [
     "blitz",
     "libraw-sys",
+    "libraw",
 ]

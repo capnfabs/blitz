@@ -57,6 +57,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "blitz"
 version = "0.1.0"
+dependencies = [
+ "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libraw 0.1.0",
+]
 
 [[package]]
 name = "byteorder"
@@ -160,6 +164,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc 1.0.50 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "libraw"
+version = "0.1.0"
+dependencies = [
+ "libraw-sys 0.1.0",
+ "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
