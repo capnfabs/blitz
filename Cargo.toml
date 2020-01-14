@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "blitz",
+    "libraw-sys",
+]
