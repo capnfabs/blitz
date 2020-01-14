@@ -31,7 +31,39 @@ fn main() {
     println!("Saving");
     preview.save(raw_preview_filename).unwrap();
     println!("Done saving");
+    dump_details(&file);
     open_preview(raw_preview_filename)
+}
+
+fn dump_details(img: &libraw::RawFile) {
+    let c = img.colordata();
+    //println!("cblack {:?}", c.cblack);
+    println!("black {:?}", c.black);
+    println!("data_maximum {:?}", c.data_maximum);
+    println!("maximum {:?}", c.maximum);
+    println!("linear_max {:?}", c.linear_max);
+    println!("fmaximum {:?}", c.fmaximum);
+    println!("fnorm {:?}", c.fnorm);
+    println!("white {:?}", c.white);
+    // white balance coeefficients, e.g. [584.0, 302.0, 546.0, 0.0]
+    println!("cam_mul {:?}", c.cam_mul);
+    //"White balance coefficients for daylight (daylight balance). Either read from file, or calculated on the basis of file data, or taken from hardcoded constants."
+    println!("pre_mul {:?}", c.pre_mul);
+    println!("cmatrix {:?}", c.cmatrix);
+    println!("ccm {:?}", c.ccm);
+    println!("rgb_cam {:?}", c.rgb_cam);
+    println!("cam_xyz {:?}", c.cam_xyz);
+    println!("flash_used {:?}", c.flash_used);
+    println!("canon_ev {:?}", c.canon_ev);
+    //println!("model2 {:?}", c.model2);
+    //println!("UniqueCameraModel {:?}", c.UniqueCameraModel);
+    //println!("LocalizedCameraModel {:?}", c.LocalizedCameraModel);
+    println!("profile {:?}", c.profile);
+    println!("profile_length {:?}", c.profile_length);
+    println!("black_stat {:?}", c.black_stat);
+    println!("baseline_exposure {:?}", c.baseline_exposure);
+    //println!("WB_Coeffs {:?}", c.WB_Coeffs);
+    //println!("WBCT_Coeffs {:?}", c.WBCT_Coeffs);
 }
 
 fn dump_to_file(filename: &str, data: &[u8]) -> std::io::Result<()> {
@@ -72,6 +104,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
                 sizes.raw_height as u32,
                 img_data,
                 mapping,
+                &img.colordata().rgb_cam,
             );
             pixel
         },
@@ -87,14 +120,17 @@ fn map_x_trans(
     _height: u32,
     data: &[u16],
     mapping: &[[i8; 6]; 6],
+    rgb_cam: &[[f32; 4usize]; 3usize],
 ) -> image::Rgb<u8> {
     let idx = (y * (width as u32) + x) as usize;
     // TODO: 8 is the target per-channel size here, encode this with generics probably.
-    let val = (data[idx] >> (BITS_PER_PIXEL - 8)) as u8;
-    match mapping[x as usize % 6][y as usize % 6] {
-        0 => image::Rgb([val, 0, 0]),      // red
-        1 => image::Rgb([0, val >> 1, 0]), // green
-        2 => image::Rgb([0, 0, val]),      // blue
-        _ => panic!("Got unexpected value in xtrans mapping"),
-    }
+    let val = (data[idx] >> (BITS_PER_PIXEL - 8)) as f32;
+    let color = mapping[x as usize % 6][y as usize % 6] as usize;
+    // lo-fi matrix transpose
+    let colors = [rgb_cam[0][color], rgb_cam[1][color], rgb_cam[2][color]];
+    image::Rgb([
+        (val * colors[0]) as u8,
+        (val * colors[1]) as u8,
+        (val * colors[2]) as u8,
+    ])
 }

@@ -110,6 +110,10 @@ impl RawFile {
         unsafe { &(*self.libraw).idata.xtrans_abs }
     }
 
+    pub fn colordata(&self) -> &libraw_colordata_t {
+        unsafe { &(*self.libraw).color }
+    }
+
     pub fn get_jpeg_thumbnail(&self) -> &[u8] {
         // this is safe to call multiple times.
         with_err_conversion(|| unsafe { libraw_unpack_thumb(self.libraw) }).unwrap();
