@@ -43,17 +43,23 @@ fn main() {
     open_preview(raw_preview_filename)
 }
 
+fn large_array_str<T>(array: &[T]) -> String
+where
+    T: ToString,
+{
+    array
+        .into_iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+}
+
 fn dump_details(img: &libraw::RawFile) {
     let c = img.colordata();
+
+    //println!("curve [{}]", large_array_str(&c.curve));
     // https://github.com/LibRaw/LibRaw/blob/master/src/preprocessing/subtract_black.cpp
-    println!(
-        "cblack {:?}",
-        c.cblack
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>()
-            .join(",")
-    );
+    //println!("cblack [{}]", large_array_str(&c.cblack));
     println!("black {:?}", c.black);
     println!("data_maximum {:?}", c.data_maximum);
     println!("maximum {:?}", c.maximum);
@@ -77,9 +83,13 @@ fn dump_details(img: &libraw::RawFile) {
     println!("profile {:?}", c.profile);
     println!("profile_length {:?}", c.profile_length);
     println!("black_stat {:?}", c.black_stat);
+    //pub dng_color: [libraw_dng_color_t; 2usize],
+    //pub dng_levels: libraw_dng_levels_t,
     println!("baseline_exposure {:?}", c.baseline_exposure);
     //println!("WB_Coeffs {:?}", c.WB_Coeffs);
     //println!("WBCT_Coeffs {:?}", c.WBCT_Coeffs);
+    // phase1?
+    //pub P1_color: [libraw_P1_color_t; 2usize],
 }
 
 fn dump_to_file(filename: &str, data: &[u8]) -> std::io::Result<()> {
@@ -154,6 +164,14 @@ impl Color {
             _ => None,
         }
     }
+
+    fn multipliers(&self) -> [u16; 3] {
+        match self {
+            Color::Red => [1, 0, 0],
+            Color::Green => [0, 1, 0],
+            Color::Blue => [0, 0, 1],
+        }
+    }
 }
 
 impl<'a> BlackValues<'a> {
@@ -161,7 +179,7 @@ impl<'a> BlackValues<'a> {
         BlackValues { cdata }
     }
 
-    fn black_val(&self, x: u32, y: u32, color: Color) -> u16 {
+    fn black_val(&self, x: u32, y: u32, color: &Color) -> u16 {
         let (black_width, black_height) = (self.cdata.cblack[4], self.cdata.cblack[5]);
         let (black_x, black_y) = (x % black_width, y % black_height);
         let idx = (black_y * (black_width) + black_x) as usize;
@@ -178,16 +196,19 @@ fn render(
     mapping: &[[i8; 6]; 6],
     colors: &libraw::libraw_colordata_t,
 ) -> image::Rgb<u8> {
+    let scale = 255.0 / (colors.maximum as f32);
     let black_values = BlackValues::wrap(colors);
     let idx = (y * (width as u32) + x) as usize;
+
     // TODO: 8 is the target per-channel size here, encode this with generics probably.
     let color = Color::from(mapping[x as usize % 6][y as usize % 6]).unwrap();
-    let cmap = colors.rgb_cam[color.idx()];
-    let val = (data[idx] - black_values.black_val(x, y, color)) as f32;
-    // lo-fi matrix transpose
+    let black = black_values.black_val(x, y, &color);
+    let val = (data[idx] - black) as f32;
+    //let cmap = colors.rgb_cam[color.idx()];
+    let cmap = color.multipliers();
     image::Rgb([
-        (val * cmap[0]) as u8,
-        (val * cmap[1]) as u8,
-        (val * cmap[2]) as u8,
+        (val * cmap[0] as f32 * scale) as u8,
+        (val * cmap[1] as f32 * scale) as u8,
+        (val * cmap[2] as f32 * scale) as u8,
     ])
 }
