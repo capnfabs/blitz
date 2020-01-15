@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate clap;
 
+use chrono::prelude::*;
 use image::ImageBuffer;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 
@@ -23,7 +25,13 @@ fn main() {
     .get_matches();
 
     let preview_filename = "/tmp/thumb.jpg";
-    let raw_preview_filename = "/tmp/render.jpg";
+    let home = env::var("HOME").unwrap();
+    let utc: DateTime<Utc> = Utc::now();
+    let raw_preview_filename = &format!(
+        "{0}/Downloads/render-{1}.jpg",
+        home,
+        utc.format("%F-%H%M%S")
+    );
     let file = libraw::RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
     println!("Opened file: {:?}", file);
     dump_to_file(preview_filename, file.get_jpeg_thumbnail()).unwrap();
@@ -96,7 +104,6 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
         sizes.raw_width as u32 / DBG_CROP_FACTOR,
         sizes.raw_height as u32 / DBG_CROP_FACTOR,
         |x, y| {
-            // TODO: this should be a generic call to some kind of demosaic algorithm.
             let pixel = map_x_trans(
                 x,
                 y,
