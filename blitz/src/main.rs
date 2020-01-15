@@ -45,7 +45,15 @@ fn main() {
 
 fn dump_details(img: &libraw::RawFile) {
     let c = img.colordata();
-    //println!("cblack {:?}", c.cblack);
+    // https://github.com/LibRaw/LibRaw/blob/master/src/preprocessing/subtract_black.cpp
+    println!(
+        "cblack {:?}",
+        c.cblack
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(",")
+    );
     println!("black {:?}", c.black);
     println!("data_maximum {:?}", c.data_maximum);
     println!("maximum {:?}", c.maximum);
@@ -104,40 +112,82 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
         sizes.raw_width as u32 / DBG_CROP_FACTOR,
         sizes.raw_height as u32 / DBG_CROP_FACTOR,
         |x, y| {
-            let pixel = map_x_trans(
+            render(
                 x,
                 y,
                 sizes.raw_width as u32,
                 sizes.raw_height as u32,
                 img_data,
                 mapping,
-                &img.colordata().rgb_cam,
-            );
-            pixel
+                img.colordata(),
+            )
         },
     );
     println!("Done rendering");
     buf
 }
 
-fn map_x_trans(
+struct BlackValues<'a> {
+    cdata: &'a libraw::libraw_colordata_t,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Color {
+    fn idx(&self) -> usize {
+        match self {
+            Color::Red => 0,
+            Color::Green => 1,
+            Color::Blue => 2,
+        }
+    }
+    // TODO: make this generic
+    fn from(val: i8) -> Option<Color> {
+        match val {
+            0 => Some(Color::Red),
+            1 => Some(Color::Green),
+            2 => Some(Color::Blue),
+            _ => None,
+        }
+    }
+}
+
+impl<'a> BlackValues<'a> {
+    fn wrap(cdata: &'a libraw::libraw_colordata_t) -> BlackValues<'a> {
+        BlackValues { cdata }
+    }
+
+    fn black_val(&self, x: u32, y: u32, color: Color) -> u16 {
+        let (black_width, black_height) = (self.cdata.cblack[4], self.cdata.cblack[5]);
+        let (black_x, black_y) = (x % black_width, y % black_height);
+        let idx = (black_y * (black_width) + black_x) as usize;
+        (self.cdata.black + self.cdata.cblack[6 + idx] + self.cdata.cblack[color.idx()]) as u16
+    }
+}
+
+fn render(
     x: u32,
     y: u32,
     width: u32,
     _height: u32,
     data: &[u16],
     mapping: &[[i8; 6]; 6],
-    rgb_cam: &[[f32; 4usize]; 3usize],
+    colors: &libraw::libraw_colordata_t,
 ) -> image::Rgb<u8> {
+    let black_values = BlackValues::wrap(colors);
     let idx = (y * (width as u32) + x) as usize;
     // TODO: 8 is the target per-channel size here, encode this with generics probably.
-    let val = (data[idx] >> (BITS_PER_PIXEL - 8)) as f32;
-    let color = mapping[x as usize % 6][y as usize % 6] as usize;
+    let color = Color::from(mapping[x as usize % 6][y as usize % 6]).unwrap();
+    let cmap = colors.rgb_cam[color.idx()];
+    let val = (data[idx] - black_values.black_val(x, y, color)) as f32;
     // lo-fi matrix transpose
-    let colors = [rgb_cam[0][color], rgb_cam[1][color], rgb_cam[2][color]];
     image::Rgb([
-        (val * colors[0]) as u8,
-        (val * colors[1]) as u8,
-        (val * colors[2]) as u8,
+        (val * cmap[0]) as u8,
+        (val * cmap[1]) as u8,
+        (val * cmap[2]) as u8,
     ])
 }

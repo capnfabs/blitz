@@ -9,6 +9,8 @@ mod tests {
 #[macro_use]
 extern crate quick_error;
 
+pub use libraw_sys::libraw_colordata_t;
+
 use libraw_sys::*;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
