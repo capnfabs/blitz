@@ -271,8 +271,8 @@ fn render(
 
     //let cmap = color.multipliers();
     image::Rgb([
-        (vals[0] * scale) as u8,
-        (vals[1] * scale) as u8,
-        (vals[2] * scale) as u8,
+        (vals[0] * scale * 2.172) as u8,
+        (vals[1] * scale * 0.948) as u8,
+        (vals[2] * scale * 1.527) as u8,
     ])
 }
