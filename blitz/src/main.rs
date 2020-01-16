@@ -4,10 +4,11 @@ extern crate clap;
 use chrono::prelude::*;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
+use itertools::izip;
 use libraw::{Color, XTransPixelMap};
-use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::{env, fs};
 
 fn main() {
     let matches = clap_app!(blitz =>
@@ -43,6 +44,11 @@ fn main() {
     preview
         .save_with_format(raw_preview_filename, ImageFormat::TIFF)
         .unwrap();
+    let metadata = fs::metadata(raw_preview_filename).unwrap();
+    // Set readonly so that I don't accidentally save over it later.
+    let mut p = metadata.permissions();
+    p.set_readonly(true);
+    fs::set_permissions(raw_preview_filename, p).unwrap();
     println!("Done saving");
     dump_details(&file);
     open_preview(raw_preview_filename)
@@ -239,19 +245,34 @@ fn render(
     let scale = 255.0 / (colors.maximum as f32);
     let black_values = BlackValues::wrap(colors);
 
-    let color = mapping[x as usize % 6][y as usize % 6];
-    let black = black_values.black_val(x, y, color);
+    //let black = black_values.black_val(x, y, color);
     let offsets = find_offsets(mapping, x as usize, y as usize);
     let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
     let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
     let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
-    // Skipping black subtraction for now
+    // TODO: Skipping black subtraction for now
+    // TODO: this is a matrix multiplication, but I don't want to deal with that right now.
+    let r_contrib: Vec<f32> = colors.rgb_cam[Color::Red.idx()]
+        .iter()
+        .map(|x| x * data[r_idx] as f32)
+        .collect();
+    let g_contrib: Vec<f32> = colors.rgb_cam[Color::Green.idx()]
+        .iter()
+        .map(|x| x * data[g_idx] as f32)
+        .collect();
+    let b_contrib: Vec<f32> = colors.rgb_cam[Color::Blue.idx()]
+        .iter()
+        .map(|x| x * data[b_idx] as f32)
+        .collect();
 
-    //let cmap = colors.rgb_cam[color.idx()];
+    let vals: Vec<f32> = izip!(r_contrib, g_contrib, b_contrib)
+        .map(|(r, g, b)| r + g + b)
+        .collect();
+
     //let cmap = color.multipliers();
     image::Rgb([
-        (data[r_idx] as f32 * scale * 4.0) as u8,
-        0, //(data[g_idx] as f32 * scale) as u8,
-        0, //(data[b_idx] as f32 * scale) as u8,
+        (vals[0] * scale) as u8,
+        (vals[1] * scale) as u8,
+        (vals[2] * scale) as u8,
     ])
 }

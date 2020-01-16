@@ -12,3 +12,5 @@ libraw = {path = "../libraw" }
 image = "0.22.4"
 chrono = "0.4.10"
 git2 = "0.11.0"
+ndarray = "0.13.0"
+itertools = "0.8.2"
