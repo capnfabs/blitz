@@ -11,3 +11,4 @@ clap = "2.33.0"
 libraw = {path = "../libraw" }
 image = "0.22.4"
 chrono = "0.4.10"
+git2 = "0.11.0"

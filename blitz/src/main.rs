@@ -2,6 +2,7 @@
 extern crate clap;
 
 use chrono::prelude::*;
+use git2::Repository;
 use image::ImageBuffer;
 use std::env;
 use std::fs::File;
@@ -28,9 +29,10 @@ fn main() {
     let home = env::var("HOME").unwrap();
     let utc: DateTime<Utc> = Utc::now();
     let raw_preview_filename = &format!(
-        "{0}/Downloads/render-{1}.jpg",
+        "{0}/Downloads/render-{1}-rev{2}.jpg",
         home,
-        utc.format("%F-%H%M%S")
+        utc.format("%F-%H%M%S"),
+        &git_sha_descriptor()[..7],
     );
     let file = libraw::RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
     println!("Opened file: {:?}", file);
@@ -52,6 +54,20 @@ where
         .map(|x| x.to_string())
         .collect::<Vec<String>>()
         .join(",")
+}
+
+fn git_sha_descriptor() -> String {
+    let exepath = std::env::current_exe().unwrap();
+    let repo = match Repository::discover(exepath.parent().unwrap()) {
+        Ok(repo) => repo,
+        Err(e) => panic!("failed to open: {}", e),
+    };
+    let head = match repo.head() {
+        Ok(val) => val,
+        Err(e) => panic!(e),
+    };
+    let commit = head.peel_to_commit().unwrap();
+    commit.id().to_string()
 }
 
 fn dump_details(img: &libraw::RawFile) {
