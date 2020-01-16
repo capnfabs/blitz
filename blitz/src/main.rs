@@ -3,7 +3,8 @@ extern crate clap;
 
 use chrono::prelude::*;
 use git2::Repository;
-use image::ImageBuffer;
+use image::{ImageBuffer, ImageFormat};
+use libraw::{Color, XTransPixelMap};
 use std::env;
 use std::fs::File;
 use std::io::Write;
@@ -29,7 +30,7 @@ fn main() {
     let home = env::var("HOME").unwrap();
     let utc: DateTime<Utc> = Utc::now();
     let raw_preview_filename = &format!(
-        "{0}/Downloads/render-{1}-rev{2}.jpg",
+        "{0}/Downloads/render-{1}-rev{2}.tiff",
         home,
         utc.format("%F-%H%M%S"),
         &git_sha_descriptor()[..7],
@@ -39,7 +40,9 @@ fn main() {
     dump_to_file(preview_filename, file.get_jpeg_thumbnail()).unwrap();
     let preview = render_raw_preview(&file);
     println!("Saving");
-    preview.save(raw_preview_filename).unwrap();
+    preview
+        .save_with_format(raw_preview_filename, ImageFormat::TIFF)
+        .unwrap();
     println!("Done saving");
     dump_details(&file);
     open_preview(raw_preview_filename)
@@ -169,27 +172,86 @@ impl<'a> BlackValues<'a> {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct Offset {
+    x: i8,
+    y: i8,
+}
+
+const CHECK_ORDER: [Offset; 5] = [
+    Offset { x: 0, y: 0 },
+    Offset { x: 0, y: 1 },
+    Offset { x: 1, y: 0 },
+    Offset { x: -1, y: 0 },
+    Offset { x: 0, y: -1 },
+];
+
+fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
+    for offset in CHECK_ORDER.iter() {
+        if mapping[((x as i32 + offset.x as i32).rem_euclid(6)) as usize]
+            [((y as i32 + offset.y as i32).rem_euclid(6)) as usize]
+            == color
+        {
+            return offset.clone();
+        }
+    }
+    panic!("Shouldn't get here")
+}
+
+// Returns one offset per color.
+fn find_offsets(mapping: &XTransPixelMap, x: usize, y: usize) -> [Offset; 3] {
+    // Ok so, every pixel has every color within one of the offsets from it.
+    // This doesn't apply on edges but we're going to just ignore edges until we
+    // figure out if the basic technique works.
+    [
+        offset_for_color(mapping, Color::Red, x, y),
+        offset_for_color(mapping, Color::Green, x, y),
+        offset_for_color(mapping, Color::Blue, x, y),
+    ]
+}
+
+fn pixel_idx(x: u32, y: u32, width: u32, height: u32, offset: Offset) -> usize {
+    let mut offset_y = y as i32 + offset.y as i32;
+    if offset_y < 0 {
+        offset_y = 0;
+    }
+    let mut offset_x = x as i32 + offset.x as i32;
+    if offset_x < 0 {
+        offset_x = 0;
+    }
+    let idx = (offset_y as u32 * (width as u32) + offset_x as u32) as usize;
+    if idx < (width * height) as usize {
+        idx
+    } else {
+        0
+    }
+}
+
 fn render(
     x: u32,
     y: u32,
     width: u32,
-    _height: u32,
+    height: u32,
     data: &[u16],
     mapping: &libraw::XTransPixelMap,
     colors: &libraw::libraw_colordata_t,
 ) -> image::Rgb<u8> {
     let scale = 255.0 / (colors.maximum as f32);
     let black_values = BlackValues::wrap(colors);
-    let idx = (y * (width as u32) + x) as usize;
 
     let color = mapping[x as usize % 6][y as usize % 6];
     let black = black_values.black_val(x, y, color);
-    let val = (data[idx] - black) as f32;
+    let offsets = find_offsets(mapping, x as usize, y as usize);
+    let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
+    let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
+    let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
+    // Skipping black subtraction for now
+
     //let cmap = colors.rgb_cam[color.idx()];
-    let cmap = color.multipliers();
+    //let cmap = color.multipliers();
     image::Rgb([
-        (val * cmap[0] as f32 * scale) as u8,
-        (val * cmap[1] as f32 * scale) as u8,
-        (val * cmap[2] as f32 * scale) as u8,
+        (data[r_idx] as f32 * scale * 4.0) as u8,
+        0, //(data[g_idx] as f32 * scale) as u8,
+        0, //(data[b_idx] as f32 * scale) as u8,
     ])
 }

@@ -43,7 +43,7 @@ pub struct ImgParams {
     pub image_width: u32,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Color {
     Red,
     Green,
