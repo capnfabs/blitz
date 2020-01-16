@@ -43,7 +43,42 @@ pub struct ImgParams {
     pub image_width: u32,
 }
 
-type XTransPixelMap = [[i8; 6]; 6];
+#[derive(Debug, Copy, Clone)]
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Color {
+    pub fn idx(&self) -> usize {
+        match self {
+            Color::Red => 0,
+            Color::Green => 1,
+            Color::Blue => 2,
+        }
+    }
+    // TODO: make this generic in numbers
+    pub fn from(val: i8) -> Option<Color> {
+        match val {
+            0 => Some(Color::Red),
+            1 => Some(Color::Green),
+            2 => Some(Color::Blue),
+            _ => None,
+        }
+    }
+
+    // TODO does this belong here?
+    pub fn multipliers(&self) -> [u16; 3] {
+        match self {
+            Color::Red => [1, 0, 0],
+            Color::Green => [0, 1, 0],
+            Color::Blue => [0, 0, 1],
+        }
+    }
+}
+
+pub type XTransPixelMap = [[Color; 6]; 6];
 
 impl Drop for RawFile {
     fn drop(&mut self) {
@@ -61,6 +96,7 @@ where
         match f() {
             0 => Ok(()),
             code => {
+                // safe because these are all constants in the libraw library.
                 let err = CStr::from_ptr(libraw_strerror(code));
                 Err(RawError::GenericError(err.to_str().unwrap()))
             }
@@ -108,8 +144,18 @@ impl RawFile {
         &self.img_params
     }
 
-    pub fn xtrans_pixel_mapping(&self) -> &XTransPixelMap {
-        unsafe { &(*self.libraw).idata.xtrans_abs }
+    // maybe TODO: we definitely don't need to create a new one of these every
+    // time, we can have XTransPixelMap just wrap the existing struct with a
+    // lifetime equal to that of the RawFile.
+    pub fn xtrans_pixel_mapping(&self) -> XTransPixelMap {
+        let orig = unsafe { &(*self.libraw).idata.xtrans_abs };
+        let mut colors = [[Color::Red; 6]; 6];
+        for r in 0..6 {
+            for c in 0..6 {
+                colors[r][c] = Color::from(orig[r][c]).unwrap();
+            }
+        }
+        colors
     }
 
     pub fn colordata(&self) -> &libraw_colordata_t {

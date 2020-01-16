@@ -125,7 +125,6 @@ fn open_preview(filename: &str) {
 }
 
 const DBG_CROP_FACTOR: u32 = 1;
-const BITS_PER_PIXEL: u16 = 14;
 
 fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let sizes = img.img_params();
@@ -144,7 +143,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
                 sizes.raw_width as u32,
                 sizes.raw_height as u32,
                 img_data,
-                mapping,
+                &mapping,
                 img.colordata(),
             )
         },
@@ -157,45 +156,12 @@ struct BlackValues<'a> {
     cdata: &'a libraw::libraw_colordata_t,
 }
 
-enum Color {
-    Red,
-    Green,
-    Blue,
-}
-
-impl Color {
-    fn idx(&self) -> usize {
-        match self {
-            Color::Red => 0,
-            Color::Green => 1,
-            Color::Blue => 2,
-        }
-    }
-    // TODO: make this generic
-    fn from(val: i8) -> Option<Color> {
-        match val {
-            0 => Some(Color::Red),
-            1 => Some(Color::Green),
-            2 => Some(Color::Blue),
-            _ => None,
-        }
-    }
-
-    fn multipliers(&self) -> [u16; 3] {
-        match self {
-            Color::Red => [1, 0, 0],
-            Color::Green => [0, 1, 0],
-            Color::Blue => [0, 0, 1],
-        }
-    }
-}
-
 impl<'a> BlackValues<'a> {
     fn wrap(cdata: &'a libraw::libraw_colordata_t) -> BlackValues<'a> {
         BlackValues { cdata }
     }
 
-    fn black_val(&self, x: u32, y: u32, color: &Color) -> u16 {
+    fn black_val(&self, x: u32, y: u32, color: libraw::Color) -> u16 {
         let (black_width, black_height) = (self.cdata.cblack[4], self.cdata.cblack[5]);
         let (black_x, black_y) = (x % black_width, y % black_height);
         let idx = (black_y * (black_width) + black_x) as usize;
@@ -209,16 +175,15 @@ fn render(
     width: u32,
     _height: u32,
     data: &[u16],
-    mapping: &[[i8; 6]; 6],
+    mapping: &libraw::XTransPixelMap,
     colors: &libraw::libraw_colordata_t,
 ) -> image::Rgb<u8> {
     let scale = 255.0 / (colors.maximum as f32);
     let black_values = BlackValues::wrap(colors);
     let idx = (y * (width as u32) + x) as usize;
 
-    // TODO: 8 is the target per-channel size here, encode this with generics probably.
-    let color = Color::from(mapping[x as usize % 6][y as usize % 6]).unwrap();
-    let black = black_values.black_val(x, y, &color);
+    let color = mapping[x as usize % 6][y as usize % 6];
+    let black = black_values.black_val(x, y, color);
     let val = (data[idx] - black) as f32;
     //let cmap = colors.rgb_cam[color.idx()];
     let cmap = color.multipliers();
