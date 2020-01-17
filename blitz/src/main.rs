@@ -4,8 +4,11 @@ extern crate clap;
 use chrono::prelude::*;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
-use itertools::izip;
+use itertools::{izip, Itertools};
+use libraw::Color::Red;
 use libraw::{Color, XTransPixelMap};
+use num_integer::Integer;
+use ordered_float::NotNan;
 use std::fs::File;
 use std::io::Write;
 use std::{env, fs};
@@ -242,10 +245,9 @@ fn render(
     mapping: &libraw::XTransPixelMap,
     colors: &libraw::libraw_colordata_t,
 ) -> image::Rgb<u8> {
-    let scale = 255.0 / (colors.maximum as f32);
-    let black_values = BlackValues::wrap(colors);
+    //let black_values = BlackValues::wrap(colors);
 
-    //let black = black_values.black_val(x, y, color);
+    let black = 1022; // hardcoded based on experience
     let offsets = find_offsets(mapping, x as usize, y as usize);
     let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
     let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
@@ -254,25 +256,49 @@ fn render(
     // TODO: this is a matrix multiplication, but I don't want to deal with that right now.
     let r_contrib: Vec<f32> = colors.rgb_cam[Color::Red.idx()]
         .iter()
-        .map(|x| x * data[r_idx] as f32)
+        .map(|x| x * (data[r_idx] - black) as f32)
         .collect();
     let g_contrib: Vec<f32> = colors.rgb_cam[Color::Green.idx()]
         .iter()
-        .map(|x| x * data[g_idx] as f32)
+        .map(|x| x * (data[g_idx] - black) as f32)
         .collect();
     let b_contrib: Vec<f32> = colors.rgb_cam[Color::Blue.idx()]
         .iter()
-        .map(|x| x * data[b_idx] as f32)
+        .map(|x| x * (data[b_idx] - black) as f32)
         .collect();
 
     let vals: Vec<f32> = izip!(r_contrib, g_contrib, b_contrib)
         .map(|(r, g, b)| r + g + b)
         .collect();
 
-    //let cmap = color.multipliers();
+    let wb_coefs = make_normalized_wb_coefs(colors.cam_mul);
+
+    let scale = 255.0 / ((colors.maximum - black as u32) as f32);
+
     image::Rgb([
-        (vals[0] * scale * 2.172) as u8,
-        (vals[1] * scale * 0.948) as u8,
-        (vals[2] * scale * 1.527) as u8,
+        saturating_downcast(vals[0] * scale * wb_coefs[0]),
+        saturating_downcast(vals[1] * scale * wb_coefs[1]),
+        saturating_downcast(vals[2] * scale * wb_coefs[2]),
     ])
+}
+
+fn make_normalized_wb_coefs(coefs: [f32; 4]) -> [f32; 3] {
+    let maxval = coefs
+        .iter()
+        .cloned()
+        .map_into::<NotNan<f32>>()
+        .max()
+        .unwrap()
+        .into_inner();
+    [coefs[0] / maxval, coefs[1] / maxval, coefs[2] / maxval]
+}
+
+fn saturating_downcast(val: f32) -> u8 {
+    if val.is_sign_negative() {
+        0
+    } else if (val as u16) > std::u8::MAX as u16 {
+        255
+    } else {
+        val as u8
+    }
 }
