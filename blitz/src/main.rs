@@ -30,7 +30,6 @@ fn main() {
     )
     .get_matches();
 
-    let preview_filename = "/tmp/thumb.jpg";
     let home = env::var("HOME").unwrap();
     let utc: DateTime<Utc> = Utc::now();
     let raw_preview_filename = &format!(
@@ -39,9 +38,10 @@ fn main() {
         utc.format("%F-%H%M%S"),
         &git_sha_descriptor()[..7],
     );
+    println!("Loading RAW data");
     let file = libraw::RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
     println!("Opened file: {:?}", file);
-    dump_to_file(preview_filename, file.get_jpeg_thumbnail()).unwrap();
+    println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");
     preview
@@ -139,26 +139,14 @@ fn open_preview(filename: &str) {
 const DBG_CROP_FACTOR: u32 = 1;
 
 fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
-    let sizes = img.img_params();
-    println!("Loading RAW data");
-    let img_data = img.load_raw_data();
-    println!("Done loading; rendering");
-    let mapping = img.xtrans_pixel_mapping();
+    let img_data = img.raw_data();
+
+    let renderer = ImageRenderer::new(img);
 
     let buf = ImageBuffer::from_fn(
-        sizes.raw_width as u32 / DBG_CROP_FACTOR,
-        sizes.raw_height as u32 / DBG_CROP_FACTOR,
-        |x, y| {
-            render(
-                x,
-                y,
-                sizes.raw_width as u32,
-                sizes.raw_height as u32,
-                img_data,
-                &mapping,
-                img.colordata(),
-            )
-        },
+        img.img_params().raw_width as u32 / DBG_CROP_FACTOR,
+        img.img_params().raw_height as u32 / DBG_CROP_FACTOR,
+        |x, y| renderer.renderpixel(x, y),
     );
     println!("Done rendering");
     buf
@@ -236,50 +224,67 @@ fn pixel_idx(x: u32, y: u32, width: u32, height: u32, offset: Offset) -> usize {
     }
 }
 
-fn render(
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    data: &[u16],
-    mapping: &libraw::XTransPixelMap,
-    colors: &libraw::libraw_colordata_t,
-) -> image::Rgb<u8> {
-    //let black_values = BlackValues::wrap(colors);
+struct ImageRenderer<'a> {
+    raw_file: &'a libraw::RawFile,
+    data: &'a [u16],
+    wb_coefs: [f32; 3],
+    mapping: XTransPixelMap,
+    scale: f32,
+}
 
-    let black = 1022; // hardcoded based on experience
-    let offsets = find_offsets(mapping, x as usize, y as usize);
-    let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
-    let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
-    let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
-    // TODO: Skipping black subtraction for now
-    // TODO: this is a matrix multiplication, but I don't want to deal with that right now.
-    let r_contrib: Vec<f32> = colors.rgb_cam[Color::Red.idx()]
-        .iter()
-        .map(|x| x * (data[r_idx] - black) as f32)
-        .collect();
-    let g_contrib: Vec<f32> = colors.rgb_cam[Color::Green.idx()]
-        .iter()
-        .map(|x| x * (data[g_idx] - black) as f32)
-        .collect();
-    let b_contrib: Vec<f32> = colors.rgb_cam[Color::Blue.idx()]
-        .iter()
-        .map(|x| x * (data[b_idx] - black) as f32)
-        .collect();
+impl<'a> ImageRenderer<'a> {
+    pub fn new(img: &libraw::RawFile) -> ImageRenderer {
+        let wb_coefs = make_normalized_wb_coefs(img.colordata().cam_mul);
+        let mapping = img.xtrans_pixel_mapping();
+        let data = img.raw_data();
 
-    let vals: Vec<f32> = izip!(r_contrib, g_contrib, b_contrib)
-        .map(|(r, g, b)| r + g + b)
-        .collect();
+        // TODO: this doesn't give the right dynamic range on the output image.
+        let scale = 255.0 / (img.colordata().maximum as f32);
+        ImageRenderer {
+            raw_file: img,
+            data,
+            wb_coefs,
+            mapping,
+            scale,
+        }
+    }
 
-    let wb_coefs = make_normalized_wb_coefs(colors.cam_mul);
+    fn renderpixel(&self, x: u32, y: u32) -> image::Rgb<u8> {
+        let offsets = find_offsets(&self.mapping, x as usize, y as usize);
+        let width = self.raw_file.img_params().raw_width;
+        let height = self.raw_file.img_params().raw_height;
+        let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
+        let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
+        let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
 
-    let scale = 255.0 / ((colors.maximum - black as u32) as f32);
+        let colors = self.raw_file.colordata();
 
-    image::Rgb([
-        saturating_downcast(vals[0] * scale * wb_coefs[0]),
-        saturating_downcast(vals[1] * scale * wb_coefs[1]),
-        saturating_downcast(vals[2] * scale * wb_coefs[2]),
-    ])
+        // TODO: Skipping black subtraction for now
+
+        // TODO: this is a matrix multiplication, but I don't want to deal with that right now.
+        let r_contrib: Vec<f32> = colors.rgb_cam[Color::Red.idx()]
+            .iter()
+            .map(|x| x * (self.data[r_idx]) as f32)
+            .collect();
+        let g_contrib: Vec<f32> = colors.rgb_cam[Color::Green.idx()]
+            .iter()
+            .map(|x| x * (self.data[g_idx]) as f32)
+            .collect();
+        let b_contrib: Vec<f32> = colors.rgb_cam[Color::Blue.idx()]
+            .iter()
+            .map(|x| x * (self.data[b_idx]) as f32)
+            .collect();
+
+        let vals: Vec<f32> = izip!(r_contrib, g_contrib, b_contrib)
+            .map(|(r, g, b)| r + g + b)
+            .collect();
+
+        image::Rgb([
+            saturating_downcast(vals[0] * self.scale * self.wb_coefs[0]),
+            saturating_downcast(vals[1] * self.scale * self.wb_coefs[1]),
+            saturating_downcast(vals[2] * self.scale * self.wb_coefs[2]),
+        ])
+    }
 }
 
 fn make_normalized_wb_coefs(coefs: [f32; 4]) -> [f32; 3] {

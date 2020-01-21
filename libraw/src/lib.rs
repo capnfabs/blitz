@@ -31,7 +31,7 @@ type Result<T> = std::result::Result<T, RawError>;
 #[derive(Debug)]
 pub struct RawFile {
     libraw: *mut libraw_data_t,
-    // TODO: figure out how getters work
+
     img_params: ImgParams,
 }
 
@@ -88,9 +88,9 @@ impl Drop for RawFile {
     }
 }
 
-fn with_err_conversion<F>(f: F) -> Result<()>
+fn with_err_conversion<F>(mut f: F) -> Result<()>
 where
-    F: Fn() -> c_int,
+    F: FnMut() -> c_int,
 {
     unsafe {
         match f() {
@@ -118,6 +118,9 @@ impl RawFile {
         let img_path = path.as_ref().to_str().unwrap();
         let cstr = CString::new(img_path).unwrap();
         with_err_conversion(|| unsafe { libraw_open_file(libraw, cstr.as_ptr()) })?;
+
+        // this is _not_ safe to call multiple times so just do it once at init 🙃
+        with_err_conversion(|| unsafe { libraw_unpack(libraw) }).unwrap();
 
         let (rheight, rwidth, iheight, iwidth) = unsafe {
             (
@@ -163,7 +166,8 @@ impl RawFile {
     }
 
     pub fn get_jpeg_thumbnail(&self) -> &[u8] {
-        // this is safe to call multiple times.
+        // this is _not_ safe to call multiple times.
+        // TODO: fix this / figure out an API.
         with_err_conversion(|| unsafe { libraw_unpack_thumb(self.libraw) }).unwrap();
         let thumb = unsafe { (*self.libraw).thumbnail };
 
@@ -179,10 +183,8 @@ impl RawFile {
         unsafe { slice::from_raw_parts(thumb.thumb as *const u8, thumb.tlength as usize) }
     }
 
-    pub fn load_raw_data(&self) -> &[u16] {
-        with_err_conversion(|| unsafe { libraw_unpack(self.libraw) }).unwrap();
-        let sizes = unsafe { (*self.libraw).sizes };
-        // convert to u32 to avoid overflow
+    pub fn raw_data(&self) -> &[u16] {
+        let sizes = unsafe {(*self.libraw)}.rawdata.sizes;
         let num_shorts = sizes.raw_width as usize * sizes.raw_height as usize;
         unsafe { slice::from_raw_parts((*self.libraw).rawdata.raw_image, num_shorts) }
     }
