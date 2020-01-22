@@ -4,14 +4,14 @@ extern crate clap;
 use chrono::prelude::*;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
-use itertools::{izip, Itertools};
+use itertools::{izip, max, Itertools};
 use libraw::Color::Red;
 use libraw::{Color, XTransPixelMap};
 use num_integer::Integer;
 use ordered_float::NotNan;
 use std::fs::File;
 use std::io::Write;
-use std::{env, fs};
+use std::{cmp, env, fs};
 
 fn main() {
     let matches = clap_app!(blitz =>
@@ -87,7 +87,7 @@ fn dump_details(img: &libraw::RawFile) {
 
     //println!("curve [{}]", large_array_str(&c.curve));
     // https://github.com/LibRaw/LibRaw/blob/master/src/preprocessing/subtract_black.cpp
-    //println!("cblack [{}]", large_array_str(&c.cblack));
+    println!("cblack [{}]", large_array_str(&c.cblack));
     println!("black {:?}", c.black);
     println!("data_maximum {:?}", c.data_maximum);
     println!("maximum {:?}", c.maximum);
@@ -138,15 +138,120 @@ fn open_preview(filename: &str) {
 
 const DBG_CROP_FACTOR: u32 = 1;
 
+type Stage = fn(usize, usize) -> Pixel;
+
+struct Pixel {
+    Red: u16,
+    Green: u16,
+    Blue: u16,
+}
+
+const BIT_SHIFT: u8 = 14 - 8;
+
+impl Pixel {
+    fn toRgb(&self) -> image::Rgb<u8> {
+        image::Rgb([
+            (self.Red >> BIT_SHIFT) as u8,
+            (self.Green >> BIT_SHIFT) as u8,
+            (self.Blue >> BIT_SHIFT) as u8,
+        ])
+    }
+}
+
+fn only(p: Pixel, color: Color) -> Pixel {
+    match color {
+        Color::Red => Pixel {
+            Red: p.Red,
+            Green: 0,
+            Blue: 0,
+        },
+        Color::Green => Pixel {
+            Red: 0,
+            Green: p.Green,
+            Blue: 0,
+        },
+        Color::Blue => Pixel {
+            Red: 0,
+            Green: 0,
+            Blue: p.Blue,
+        },
+    }
+}
+
 fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let img_data = img.raw_data();
 
-    let renderer = ImageRenderer::new(img);
+    let mapping = img.xtrans_pixel_mapping();
+    let width = img.img_params().raw_width as usize;
+    let height = img.img_params().raw_height as usize;
+
+    let demosaic = |x: u32, y: u32| -> Pixel {
+        let x = x as usize;
+        let y = y as usize;
+        let offsets = find_offsets(&mapping, x, y);
+        let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
+        let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
+        let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
+        Pixel {
+            Red: img_data[r_idx],
+            Green: img_data[g_idx],
+            Blue: img_data[b_idx],
+        }
+    };
+
+    // Compute scaling params
+    let mut mins = [std::u16::MAX; 3];
+    let mut maxs = [std::u16::MIN; 3];
+    for row in 0..height {
+        for col in 0..width {
+            let d = img_data[row * width + col];
+            let color = color_at(&mapping, col, row);
+            if d > 5650 {
+                println!("Hot pixel? val={:5} coords={:4},{:4}", d, col, row);
+                continue;
+            }
+
+            if d != 0 {
+                // 0s are boring and probably represent edge space or something
+                mins[color.idx()] = cmp::min(d, mins[color.idx()]);
+            }
+
+            maxs[color.idx()] = cmp::max(d, maxs[color.idx()]);
+        }
+    }
+    let overall_max = *(maxs.iter().max().unwrap()) as f32;
+    //let overall_min = mins.iter().min().unwrap();
+    // hot pixels are messing with the scaling; histogram shows three green values crazy high.
+
+    println!("MINS {:5} {:5} {:5}", mins[0], mins[1], mins[2]);
+    println!("MAXS {:5} {:5} {:5}", maxs[0], maxs[1], maxs[2]);
+    println!("Overall max: {:}", overall_max);
+    // MINS   825   882   831
+    // MAXS  4579 13556  4491
+    // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
+    // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
+    // how they work.
+
+    // Let's do some WB.
+    let pre_mul = img.colordata().pre_mul;
+    let scale_factors: Vec<u16> = make_normalized_wb_coefs(pre_mul)
+        .iter()
+        .map(|val| val * (std::u16::MAX as f32) / overall_max)
+        .map(|v| v as u16)
+        .collect();
+    println!("scale_factors: {:?}", scale_factors);
+    let scale = |p: Pixel| -> Pixel {
+        Pixel {
+            Red: p.Red * scale_factors[0],
+            Green: p.Green * scale_factors[1],
+            Blue: p.Blue * scale_factors[2],
+        }
+    };
 
     let buf = ImageBuffer::from_fn(
-        img.img_params().raw_width as u32 / DBG_CROP_FACTOR,
-        img.img_params().raw_height as u32 / DBG_CROP_FACTOR,
-        |x, y| renderer.renderpixel(x, y),
+        img.img_params().raw_width / DBG_CROP_FACTOR,
+        img.img_params().raw_height / DBG_CROP_FACTOR,
+        |x, y| scale(demosaic(x, y)).toRgb(),
     );
     println!("Done rendering");
     buf
@@ -183,6 +288,10 @@ const CHECK_ORDER: [Offset; 5] = [
     Offset { x: 0, y: -1 },
 ];
 
+fn color_at(mapping: &XTransPixelMap, x: usize, y: usize) -> Color {
+    mapping[x % 6][y % 6]
+}
+
 fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
     for offset in CHECK_ORDER.iter() {
         if mapping[((x as i32 + offset.x as i32).rem_euclid(6)) as usize]
@@ -207,7 +316,7 @@ fn find_offsets(mapping: &XTransPixelMap, x: usize, y: usize) -> [Offset; 3] {
     ]
 }
 
-fn pixel_idx(x: u32, y: u32, width: u32, height: u32, offset: Offset) -> usize {
+fn pixel_idx(x: usize, y: usize, width: usize, height: usize, offset: Offset) -> usize {
     let mut offset_y = y as i32 + offset.y as i32;
     if offset_y < 0 {
         offset_y = 0;
@@ -248,45 +357,9 @@ impl<'a> ImageRenderer<'a> {
             scale,
         }
     }
-
-    fn renderpixel(&self, x: u32, y: u32) -> image::Rgb<u8> {
-        let offsets = find_offsets(&self.mapping, x as usize, y as usize);
-        let width = self.raw_file.img_params().raw_width;
-        let height = self.raw_file.img_params().raw_height;
-        let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
-        let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
-        let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
-
-        let colors = self.raw_file.colordata();
-
-        // TODO: Skipping black subtraction for now
-
-        // TODO: this is a matrix multiplication, but I don't want to deal with that right now.
-        let r_contrib: Vec<f32> = colors.rgb_cam[Color::Red.idx()]
-            .iter()
-            .map(|x| x * (self.data[r_idx]) as f32)
-            .collect();
-        let g_contrib: Vec<f32> = colors.rgb_cam[Color::Green.idx()]
-            .iter()
-            .map(|x| x * (self.data[g_idx]) as f32)
-            .collect();
-        let b_contrib: Vec<f32> = colors.rgb_cam[Color::Blue.idx()]
-            .iter()
-            .map(|x| x * (self.data[b_idx]) as f32)
-            .collect();
-
-        let vals: Vec<f32> = izip!(r_contrib, g_contrib, b_contrib)
-            .map(|(r, g, b)| r + g + b)
-            .collect();
-
-        image::Rgb([
-            saturating_downcast(vals[0] * self.scale * self.wb_coefs[0]),
-            saturating_downcast(vals[1] * self.scale * self.wb_coefs[1]),
-            saturating_downcast(vals[2] * self.scale * self.wb_coefs[2]),
-        ])
-    }
 }
 
+/// Returns whitebalance coefficients normalized between 0 and 1
 fn make_normalized_wb_coefs(coefs: [f32; 4]) -> [f32; 3] {
     let maxval = coefs
         .iter()
