@@ -151,9 +151,9 @@ const BIT_SHIFT: u8 = 14 - 8;
 impl Pixel {
     fn toRgb(&self) -> image::Rgb<u8> {
         image::Rgb([
-            (self.Red >> BIT_SHIFT) as u8,
-            (self.Green >> BIT_SHIFT) as u8,
-            (self.Blue >> BIT_SHIFT) as u8,
+            (self.Red >> 8) as u8,
+            (self.Green >> 8) as u8,
+            (self.Blue >> 8) as u8,
         ])
     }
 }
@@ -234,11 +234,14 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
 
     // Let's do some WB.
     let pre_mul = img.colordata().pre_mul;
-    let scale_factors: Vec<u16> = make_normalized_wb_coefs(pre_mul)
+    let scale_factors = make_normalized_wb_coefs(pre_mul);
+    println!("scale_factors: {:?}", scale_factors);
+    let scale_factors: Vec<f32> = scale_factors
         .iter()
         .map(|val| val * (std::u16::MAX as f32) / overall_max)
-        .map(|v| v as u16)
         .collect();
+    println!("scale_factors: {:?}", scale_factors);
+    let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
     let scale = |p: Pixel| -> Pixel {
         Pixel {
