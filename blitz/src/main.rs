@@ -8,6 +8,7 @@ use itertools::Itertools;
 use libraw::{Color, RawFile, XTransPixelMap};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
+use std::cmp::min;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
@@ -220,7 +221,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let width = img.img_params().raw_width as usize;
     let height = img.img_params().raw_height as usize;
 
-    let passthru_demosaic = |x: Axis, y: Axis, v: u16| -> Pixel<u16> {
+    let _passthru_demosaic = |x: Axis, y: Axis, v: u16| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let color = mapping[y % 6][x % 6];
@@ -247,16 +248,15 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
 
     let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
 
-    let progress = img_data;
-    let progress = img_data.iter().copied().map(|v| black_sub(v)).collect_vec();
-    let progress = enumerate_xy(width as Axis, height as Axis, progress.as_slice())
-        .map(|(x, y, v)| passthru_demosaic(x, y, v))
-        .collect();
-    dump_sample("initial_load", progress);
-
     let img_data: Vec<u16> = img_data.iter().copied().map(|v| black_sub(v)).collect();
 
-    let max = img_data.iter().copied().max().unwrap();
+    // hot pixel elimination through a hard-coded filter lol
+    let max = img_data
+        .iter()
+        .filter(|v| **v < 6000)
+        .copied()
+        .max()
+        .unwrap();
 
     let demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
@@ -291,18 +291,24 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
-    let scale = |p: Pixel<u16>| -> Pixel<u16> {
+    let saturating_scale = |p: Pixel<u16>| -> Pixel<u16> {
         Pixel {
-            red: p.red * scale_factors[0],
-            green: p.green * scale_factors[1],
-            blue: p.blue * scale_factors[2],
+            red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
+            green: min(
+                p.green as u32 * scale_factors[1] as u32,
+                std::u16::MAX as u32,
+            ) as u16,
+            blue: min(
+                p.blue as u32 * scale_factors[2] as u32,
+                std::u16::MAX as u32,
+            ) as u16,
         }
     };
 
     let buf = ImageBuffer::from_fn(
         img.img_params().raw_width / DBG_CROP_FACTOR,
         img.img_params().raw_height / DBG_CROP_FACTOR,
-        |x, y| scale(demosaic(x, y)).to_rgb(),
+        |x, y| saturating_scale(demosaic(x, y)).to_rgb(),
     );
     println!("Done rendering");
     buf
