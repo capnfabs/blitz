@@ -175,23 +175,45 @@ where
     }
 }
 
+type Axis = u32;
+
+struct ImageLayoutIterator<'a> {
+    width: Axis,
+    height: Axis,
+    pos: usize,
+    data: &'a [u16],
+}
+
+impl Iterator for ImageLayoutIterator<'a> {
+    type Item = (Axis, Axis, u16);
+    fn next(&mut self) -> Option<u16> {
+        if self.pos >= (self.width * self.height) as usize {
+            return None
+        }
+        let result = self.data[self.pos];
+        self.pos += 1;
+        Some(result)
+    }
+}
+
+fn enumerate_xy(width: Axis, height: Axis, data: &[u16]) -> ImageLayoutIterator {
+    ImageLayoutIterator {
+        width,
+        height,
+        pos: 0,
+        data,
+    }
+}
+
 fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let img_data = img.raw_data();
 
     // Change 14 bit to 16 bit.
-    let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
+    //let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
 
     let mapping = img.xtrans_pixel_mapping();
     let width = img.img_params().raw_width as usize;
     let height = img.img_params().raw_height as usize;
-
-    let black_vals = BlackValues::wrap(img.colordata());
-
-    let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
-
-    let img_data: Vec<u16> = img_data.iter().copied().map(|v| black_sub(v)).collect();
-
-    let max = img_data.iter().copied().max().unwrap();
 
     let passthru_demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
@@ -216,6 +238,16 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
             },
         }
     };
+
+    dump_sample("initial_load", img_data.iter().copied().map(|v| ));
+
+    let black_vals = BlackValues::wrap(img.colordata());
+
+    let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
+
+    let img_data: Vec<u16> = img_data.iter().copied().map(|v| black_sub(v)).collect();
+
+    let max = img_data.iter().copied().max().unwrap();
 
     let demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
@@ -372,8 +404,7 @@ fn saturating_downcast(val: f32) -> u8 {
     }
 }
 
-/*
-fn dump_sample(label: &str, img: &RawFile) {
+fn dump_sample(label: &str, pixels: Vec<Pixel<u16>>) {
     let width = 6032;
     let height = 4028;
     let crop_width = 512;
@@ -389,8 +420,4 @@ fn dump_sample(label: &str, img: &RawFile) {
             write!(file, "%d %d %d\n", pixel[0], pixel[1], pixel[2]);
         }
     }
-  }
-    }
-    write!(file, "P3\n{} {}\n16384\n", crop_width, crop_height);
 }
-*/
