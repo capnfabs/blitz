@@ -44,6 +44,7 @@ fn main() {
     println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");
+
     preview
         .save_with_format(raw_preview_filename, ImageFormat::TIFF)
         .unwrap();
@@ -53,8 +54,9 @@ fn main() {
     p.set_readonly(true);
     fs::set_permissions(raw_preview_filename, p).unwrap();
     println!("Done saving");
+
     dump_details(&file);
-    open_preview(raw_preview_filename)
+    open_preview(raw_preview_filename);
 }
 
 #[allow(dead_code)]
@@ -176,27 +178,30 @@ where
 }
 
 type Axis = u32;
+type Value = u16;
 
 struct ImageLayoutIterator<'a> {
     width: Axis,
     height: Axis,
     pos: usize,
-    data: &'a [u16],
+    data: &'a [Value],
 }
 
-impl Iterator for ImageLayoutIterator<'a> {
+impl<'a> Iterator for ImageLayoutIterator<'a> {
     type Item = (Axis, Axis, u16);
-    fn next(&mut self) -> Option<u16> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= (self.width * self.height) as usize {
-            return None
+            return None;
         }
+        let x = self.pos as Axis % self.width;
+        let y = self.pos as Axis / self.width;
         let result = self.data[self.pos];
         self.pos += 1;
-        Some(result)
+        Some((x, y, result))
     }
 }
 
-fn enumerate_xy(width: Axis, height: Axis, data: &[u16]) -> ImageLayoutIterator {
+fn enumerate_xy(width: Axis, height: Axis, data: &[Value]) -> ImageLayoutIterator {
     ImageLayoutIterator {
         width,
         height,
@@ -215,35 +220,39 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let width = img.img_params().raw_width as usize;
     let height = img.img_params().raw_height as usize;
 
-    let passthru_demosaic = |x: u32, y: u32| -> Pixel<u16> {
+    let passthru_demosaic = |x: Axis, y: Axis, v: u16| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
-        let color = mapping[x % 6][y % 6];
-        let idx = pixel_idx(x, y, width, height, Offset { x: 0, y: 0 });
+        let color = mapping[y % 6][x % 6];
         match color {
             Color::Red => Pixel {
-                red: img_data[idx],
+                red: v,
                 blue: 0,
                 green: 0,
             },
             Color::Green => Pixel {
                 red: 0,
                 blue: 0,
-                green: img_data[idx],
+                green: v,
             },
             Color::Blue => Pixel {
                 red: 0,
-                blue: img_data[idx],
+                blue: v,
                 green: 0,
             },
         }
     };
 
-    dump_sample("initial_load", img_data.iter().copied().map(|v| ));
-
     let black_vals = BlackValues::wrap(img.colordata());
 
     let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
+
+    let progress = img_data;
+    let progress = img_data.iter().copied().map(|v| black_sub(v)).collect_vec();
+    let progress = enumerate_xy(width as Axis, height as Axis, progress.as_slice())
+        .map(|(x, y, v)| passthru_demosaic(x, y, v))
+        .collect();
+    dump_sample("initial_load", progress);
 
     let img_data: Vec<u16> = img_data.iter().copied().map(|v| black_sub(v)).collect();
 
@@ -339,8 +348,8 @@ const CHECK_ORDER: [Offset; 5] = [
 
 fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
     for offset in CHECK_ORDER.iter() {
-        if mapping[((x as i32 + offset.x as i32).rem_euclid(6)) as usize]
-            [((y as i32 + offset.y as i32).rem_euclid(6)) as usize]
+        if mapping[((y as i32 + offset.y as i32).rem_euclid(6)) as usize]
+            [((x as i32 + offset.x as i32).rem_euclid(6)) as usize]
             == color
         {
             return offset.clone();
@@ -405,19 +414,21 @@ fn saturating_downcast(val: f32) -> u8 {
 }
 
 fn dump_sample(label: &str, pixels: Vec<Pixel<u16>>) {
-    let width = 6032;
-    let height = 4028;
+    // these are different from the C++
+    let width = 6048;
+    let height = 4038;
     let crop_width = 512;
     let crop_height = 512;
     let start_col = 3834;
-    let start_row = 1168;
+    let start_row = 1168 + 6;
 
     let filename = format!("/tmp/rust_{}.ppm", label);
     let mut file = File::create(filename).unwrap();
-    write!(file, "P3\n{} {}\n16384\n", crop_width, crop_height);
+    write!(file, "P3\n{} {}\n16384\n", crop_width, crop_height).unwrap();
     for row in start_row..(start_row + crop_height) {
         for col in start_col..(start_col + crop_width) {
-            write!(file, "%d %d %d\n", pixel[0], pixel[1], pixel[2]);
+            let pixel = &pixels[row * width + col];
+            write!(file, "{} {} {}\n", pixel.red, pixel.green, pixel.blue).unwrap();
         }
     }
 }
