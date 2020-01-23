@@ -5,9 +5,12 @@ use chrono::prelude::*;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
-use libraw::{Color, XTransPixelMap};
+use libraw::{Color, RawFile, XTransPixelMap};
+use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::Write;
 use std::{env, fs};
 
 fn main() {
@@ -129,13 +132,16 @@ fn open_preview(filename: &str) {
 
 const DBG_CROP_FACTOR: u32 = 1;
 
-struct Pixel {
-    red: u16,
-    green: u16,
-    blue: u16,
+struct Pixel<U>
+where
+    U: Num + Unsigned,
+{
+    red: U,
+    green: U,
+    blue: U,
 }
 
-impl Pixel {
+impl Pixel<u16> {
     fn to_rgb(&self) -> image::Rgb<u8> {
         image::Rgb([
             (self.red >> 8) as u8,
@@ -146,21 +152,24 @@ impl Pixel {
 }
 
 #[allow(dead_code)]
-fn only(p: Pixel, color: Color) -> Pixel {
+fn only<T>(p: Pixel<T>, color: Color) -> Pixel<T>
+where
+    T: Unsigned + Num,
+{
     match color {
         Color::Red => Pixel {
             red: p.red,
-            green: 0,
-            blue: 0,
+            green: T::zero(),
+            blue: T::zero(),
         },
         Color::Green => Pixel {
-            red: 0,
+            red: T::zero(),
             green: p.green,
-            blue: 0,
+            blue: T::zero(),
         },
         Color::Blue => Pixel {
-            red: 0,
-            green: 0,
+            red: T::zero(),
+            green: T::zero(),
             blue: p.blue,
         },
     }
@@ -168,6 +177,9 @@ fn only(p: Pixel, color: Color) -> Pixel {
 
 fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let img_data = img.raw_data();
+
+    // Change 14 bit to 16 bit.
+    let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
 
     let mapping = img.xtrans_pixel_mapping();
     let width = img.img_params().raw_width as usize;
@@ -181,7 +193,31 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
 
     let max = img_data.iter().copied().max().unwrap();
 
-    let demosaic = |x: u32, y: u32| -> Pixel {
+    let passthru_demosaic = |x: u32, y: u32| -> Pixel<u16> {
+        let x = x as usize;
+        let y = y as usize;
+        let color = mapping[x % 6][y % 6];
+        let idx = pixel_idx(x, y, width, height, Offset { x: 0, y: 0 });
+        match color {
+            Color::Red => Pixel {
+                red: img_data[idx],
+                blue: 0,
+                green: 0,
+            },
+            Color::Green => Pixel {
+                red: 0,
+                blue: 0,
+                green: img_data[idx],
+            },
+            Color::Blue => Pixel {
+                red: 0,
+                blue: img_data[idx],
+                green: 0,
+            },
+        }
+    };
+
+    let demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let offsets = find_offsets(&mapping, x, y);
@@ -214,7 +250,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
-    let scale = |p: Pixel| -> Pixel {
+    let scale = |p: Pixel<u16>| -> Pixel<u16> {
         Pixel {
             red: p.red * scale_factors[0],
             green: p.green * scale_factors[1],
@@ -335,3 +371,26 @@ fn saturating_downcast(val: f32) -> u8 {
         val as u8
     }
 }
+
+/*
+fn dump_sample(label: &str, img: &RawFile) {
+    let width = 6032;
+    let height = 4028;
+    let crop_width = 512;
+    let crop_height = 512;
+    let start_col = 3834;
+    let start_row = 1168;
+
+    let filename = format!("/tmp/rust_{}.ppm", label);
+    let mut file = File::create(filename).unwrap();
+    write!(file, "P3\n{} {}\n16384\n", crop_width, crop_height);
+    for row in start_row..(start_row + crop_height) {
+        for col in start_col..(start_col + crop_width) {
+            write!(file, "%d %d %d\n", pixel[0], pixel[1], pixel[2]);
+        }
+    }
+  }
+    }
+    write!(file, "P3\n{} {}\n16384\n", crop_width, crop_height);
+}
+*/
