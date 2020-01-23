@@ -4,14 +4,11 @@ extern crate clap;
 use chrono::prelude::*;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
-use itertools::{izip, max, Itertools};
-use libraw::Color::Red;
+use itertools::Itertools;
 use libraw::{Color, XTransPixelMap};
-use num_integer::Integer;
 use ordered_float::NotNan;
-use std::fs::File;
-use std::io::Write;
-use std::{cmp, env, fs};
+use std::collections::HashSet;
+use std::{env, fs};
 
 fn main() {
     let matches = clap_app!(blitz =>
@@ -57,6 +54,7 @@ fn main() {
     open_preview(raw_preview_filename)
 }
 
+#[allow(dead_code)]
 fn large_array_str<T>(array: &[T]) -> String
 where
     T: ToString,
@@ -86,8 +84,8 @@ fn dump_details(img: &libraw::RawFile) {
     let c = img.colordata();
 
     //println!("curve [{}]", large_array_str(&c.curve));
-    // https://github.com/LibRaw/LibRaw/blob/master/src/preprocessing/subtract_black.cpp
-    println!("cblack [{}]", large_array_str(&c.cblack));
+    // [0,0,0,0,6,6,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,1022,0,0,0....]
+    //println!("cblack [{}]", large_array_str(&c.cblack));
     println!("black {:?}", c.black);
     println!("data_maximum {:?}", c.data_maximum);
     println!("maximum {:?}", c.maximum);
@@ -120,13 +118,6 @@ fn dump_details(img: &libraw::RawFile) {
     //pub P1_color: [libraw_P1_color_t; 2usize],
 }
 
-fn dump_to_file(filename: &str, data: &[u8]) -> std::io::Result<()> {
-    let mut file = File::create(filename)?;
-    println!("Writing {} bytes to {}", data.len(), filename);
-    file.write_all(data)?;
-    Ok(())
-}
-
 fn open_preview(filename: &str) {
     use std::process::Command;
 
@@ -138,42 +129,39 @@ fn open_preview(filename: &str) {
 
 const DBG_CROP_FACTOR: u32 = 1;
 
-type Stage = fn(usize, usize) -> Pixel;
-
 struct Pixel {
-    Red: u16,
-    Green: u16,
-    Blue: u16,
+    red: u16,
+    green: u16,
+    blue: u16,
 }
 
-const BIT_SHIFT: u8 = 14 - 8;
-
 impl Pixel {
-    fn toRgb(&self) -> image::Rgb<u8> {
+    fn to_rgb(&self) -> image::Rgb<u8> {
         image::Rgb([
-            (self.Red >> 8) as u8,
-            (self.Green >> 8) as u8,
-            (self.Blue >> 8) as u8,
+            (self.red >> 8) as u8,
+            (self.green >> 8) as u8,
+            (self.blue >> 8) as u8,
         ])
     }
 }
 
+#[allow(dead_code)]
 fn only(p: Pixel, color: Color) -> Pixel {
     match color {
         Color::Red => Pixel {
-            Red: p.Red,
-            Green: 0,
-            Blue: 0,
+            red: p.red,
+            green: 0,
+            blue: 0,
         },
         Color::Green => Pixel {
-            Red: 0,
-            Green: p.Green,
-            Blue: 0,
+            red: 0,
+            green: p.green,
+            blue: 0,
         },
         Color::Blue => Pixel {
-            Red: 0,
-            Green: 0,
-            Blue: p.Blue,
+            red: 0,
+            green: 0,
+            blue: p.blue,
         },
     }
 }
@@ -185,6 +173,14 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let width = img.img_params().raw_width as usize;
     let height = img.img_params().raw_height as usize;
 
+    let black_vals = BlackValues::wrap(img.colordata());
+
+    let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
+
+    let img_data: Vec<u16> = img_data.iter().copied().map(|v| black_sub(v)).collect();
+
+    let max = img_data.iter().copied().max().unwrap();
+
     let demosaic = |x: u32, y: u32| -> Pixel {
         let x = x as usize;
         let y = y as usize;
@@ -193,39 +189,14 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
         let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
         let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
         Pixel {
-            Red: img_data[r_idx],
-            Green: img_data[g_idx],
-            Blue: img_data[b_idx],
+            red: img_data[r_idx],
+            green: img_data[g_idx],
+            blue: img_data[b_idx],
         }
     };
 
     // Compute scaling params
-    let mut mins = [std::u16::MAX; 3];
-    let mut maxs = [std::u16::MIN; 3];
-    for row in 0..height {
-        for col in 0..width {
-            let d = img_data[row * width + col];
-            let color = color_at(&mapping, col, row);
-            if d > 5650 {
-                println!("Hot pixel? val={:5} coords={:4},{:4}", d, col, row);
-                continue;
-            }
-
-            if d != 0 {
-                // 0s are boring and probably represent edge space or something
-                mins[color.idx()] = cmp::min(d, mins[color.idx()]);
-            }
-
-            maxs[color.idx()] = cmp::max(d, maxs[color.idx()]);
-        }
-    }
-    let overall_max = *(maxs.iter().max().unwrap()) as f32;
-    //let overall_min = mins.iter().min().unwrap();
-    // hot pixels are messing with the scaling; histogram shows three green values crazy high.
-
-    println!("MINS {:5} {:5} {:5}", mins[0], mins[1], mins[2]);
-    println!("MAXS {:5} {:5} {:5}", maxs[0], maxs[1], maxs[2]);
-    println!("Overall max: {:}", overall_max);
+    println!("Overall max: {:}", max);
     // MINS   825   882   831
     // MAXS  4579 13556  4491
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
@@ -233,47 +204,54 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     // how they work.
 
     // Let's do some WB.
-    let pre_mul = img.colordata().pre_mul;
-    let scale_factors = make_normalized_wb_coefs(pre_mul);
+    let cam_mul = img.colordata().cam_mul;
+    let scale_factors = make_normalized_wb_coefs(cam_mul);
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<f32> = scale_factors
         .iter()
-        .map(|val| val * (std::u16::MAX as f32) / overall_max)
+        .map(|val| val * (std::u16::MAX as f32) / max as f32)
         .collect();
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
     let scale = |p: Pixel| -> Pixel {
         Pixel {
-            Red: p.Red * scale_factors[0],
-            Green: p.Green * scale_factors[1],
-            Blue: p.Blue * scale_factors[2],
+            red: p.red * scale_factors[0],
+            green: p.green * scale_factors[1],
+            blue: p.blue * scale_factors[2],
         }
     };
 
     let buf = ImageBuffer::from_fn(
         img.img_params().raw_width / DBG_CROP_FACTOR,
         img.img_params().raw_height / DBG_CROP_FACTOR,
-        |x, y| scale(demosaic(x, y)).toRgb(),
+        |x, y| scale(demosaic(x, y)).to_rgb(),
     );
     println!("Done rendering");
     buf
 }
 
-struct BlackValues<'a> {
-    cdata: &'a libraw::libraw_colordata_t,
+struct BlackValues {
+    black: u16,
 }
 
-impl<'a> BlackValues<'a> {
-    fn wrap(cdata: &'a libraw::libraw_colordata_t) -> BlackValues<'a> {
-        BlackValues { cdata }
+impl BlackValues {
+    fn wrap(cdata: &libraw::libraw_colordata_t) -> BlackValues {
+        // Check black levels are all the same for the optimised version
+        let (black_width, black_height) = (cdata.cblack[4] as usize, cdata.cblack[5] as usize);
+        let distinct_black_levels: HashSet<u32> = cdata.cblack[6..(6 + black_width * black_height)]
+            .iter()
+            .copied()
+            .collect();
+        assert_eq!(distinct_black_levels.len(), 1);
+        let distinct_black_levels: HashSet<u32> = cdata.cblack[0..4].iter().copied().collect();
+        assert_eq!(distinct_black_levels.len(), 1);
+        let black = (cdata.cblack[0] + cdata.cblack[6]) as u16;
+        BlackValues { black }
     }
 
-    fn black_val(&self, x: u32, y: u32, color: libraw::Color) -> u16 {
-        let (black_width, black_height) = (self.cdata.cblack[4], self.cdata.cblack[5]);
-        let (black_x, black_y) = (x % black_width, y % black_height);
-        let idx = (black_y * (black_width) + black_x) as usize;
-        (self.cdata.black + self.cdata.cblack[6 + idx] + self.cdata.cblack[color.idx()]) as u16
+    fn black_val(&self) -> u16 {
+        self.black
     }
 }
 
@@ -290,10 +268,6 @@ const CHECK_ORDER: [Offset; 5] = [
     Offset { x: -1, y: 0 },
     Offset { x: 0, y: -1 },
 ];
-
-fn color_at(mapping: &XTransPixelMap, x: usize, y: usize) -> Color {
-    mapping[x % 6][y % 6]
-}
 
 fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
     for offset in CHECK_ORDER.iter() {
@@ -336,44 +310,22 @@ fn pixel_idx(x: usize, y: usize, width: usize, height: usize, offset: Offset) ->
     }
 }
 
-struct ImageRenderer<'a> {
-    raw_file: &'a libraw::RawFile,
-    data: &'a [u16],
-    wb_coefs: [f32; 3],
-    mapping: XTransPixelMap,
-    scale: f32,
-}
-
-impl<'a> ImageRenderer<'a> {
-    pub fn new(img: &libraw::RawFile) -> ImageRenderer {
-        let wb_coefs = make_normalized_wb_coefs(img.colordata().cam_mul);
-        let mapping = img.xtrans_pixel_mapping();
-        let data = img.raw_data();
-
-        // TODO: this doesn't give the right dynamic range on the output image.
-        let scale = 255.0 / (img.colordata().maximum as f32);
-        ImageRenderer {
-            raw_file: img,
-            data,
-            wb_coefs,
-            mapping,
-            scale,
-        }
-    }
-}
-
-/// Returns whitebalance coefficients normalized between 0 and 1
+/// Returns whitebalance coefficients normalized such that the smallest is 1
 fn make_normalized_wb_coefs(coefs: [f32; 4]) -> [f32; 3] {
-    let maxval = coefs
+    println!("coefs {:?}", coefs);
+    let minval = coefs
         .iter()
         .cloned()
+        .filter(|v| *v != 0.0)
         .map_into::<NotNan<f32>>()
-        .max()
+        .min()
         .unwrap()
         .into_inner();
-    [coefs[0] / maxval, coefs[1] / maxval, coefs[2] / maxval]
+    println!("coefs min {:?}", minval);
+    [coefs[0] / minval, coefs[1] / minval, coefs[2] / minval]
 }
 
+#[allow(dead_code)]
 fn saturating_downcast(val: f32) -> u8 {
     if val.is_sign_negative() {
         0
