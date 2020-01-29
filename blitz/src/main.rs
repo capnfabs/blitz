@@ -2,6 +2,7 @@
 extern crate clap;
 
 use chrono::prelude::*;
+use directories::UserDirs;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
@@ -10,9 +11,10 @@ use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
 use std::cmp::min;
 use std::collections::HashSet;
+use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::{env, fs};
+use std::path::{Path, PathBuf};
 
 fn main() {
     let matches = clap_app!(blitz =>
@@ -31,33 +33,39 @@ fn main() {
     )
     .get_matches();
 
-    let home = env::var("HOME").unwrap();
-    let utc: DateTime<Utc> = Utc::now();
-    let raw_preview_filename = &format!(
-        "{0}/Downloads/render-{1}-rev{2}.tiff",
-        home,
-        utc.format("%F-%H%M%S"),
-        &git_sha_descriptor()[..7],
-    );
+    let raw_preview_filename = get_output_path();
+
     println!("Loading RAW data");
-    let file = libraw::RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
+    let file = RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
     println!("Opened file: {:?}", file);
     println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");
 
     preview
-        .save_with_format(raw_preview_filename, ImageFormat::TIFF)
+        .save_with_format(&raw_preview_filename, ImageFormat::TIFF)
         .unwrap();
-    let metadata = fs::metadata(raw_preview_filename).unwrap();
+    let metadata = fs::metadata(&raw_preview_filename).unwrap();
     // Set readonly so that I don't accidentally save over it later.
     let mut p = metadata.permissions();
     p.set_readonly(true);
-    fs::set_permissions(raw_preview_filename, p).unwrap();
+    fs::set_permissions(&raw_preview_filename, p).unwrap();
     println!("Done saving");
 
     dump_details(&file);
-    open_preview(raw_preview_filename);
+    open_preview(&raw_preview_filename);
+}
+
+fn get_output_path() -> PathBuf {
+    let ud = UserDirs::new().unwrap();
+    let download_dir = ud.download_dir().unwrap();
+    let utc: DateTime<Utc> = Utc::now();
+    let filename = format!(
+        "render-{0}-rev{1}.tiff",
+        utc.format("%F-%H%M%S"),
+        &git_sha_descriptor()[..7]
+    );
+    download_dir.join(filename)
 }
 
 #[allow(dead_code)]
@@ -124,11 +132,14 @@ fn dump_details(img: &libraw::RawFile) {
     //pub P1_color: [libraw_P1_color_t; 2usize],
 }
 
-fn open_preview(filename: &str) {
+fn open_preview<P>(filename: P)
+where
+    P: AsRef<Path>,
+{
     use std::process::Command;
 
     Command::new("open")
-        .arg(filename)
+        .arg(filename.as_ref().as_os_str())
         .spawn()
         .expect("Failed to start");
 }
@@ -253,6 +264,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     // hot pixel elimination through a hard-coded filter lol
     let max = img_data
         .iter()
+        // TODO: this is hardcoded!
         .filter(|v| **v < 6000)
         .copied()
         .max()
