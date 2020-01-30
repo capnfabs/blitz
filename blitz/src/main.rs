@@ -33,6 +33,11 @@ fn main() {
     )
     .get_matches();
 
+    let _x = libraw::raf::parse_raf(matches.value_of("INPUT").unwrap());
+    let file = RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
+    dump_details(&file);
+    return;
+
     let raw_preview_filename = get_output_path();
 
     println!("Loading RAW data");
@@ -52,7 +57,6 @@ fn main() {
     fs::set_permissions(&raw_preview_filename, p).unwrap();
     println!("Done saving");
 
-    dump_details(&file);
     open_preview(&raw_preview_filename);
 }
 

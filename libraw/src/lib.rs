@@ -1,3 +1,5 @@
+pub mod raf;
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -8,6 +10,12 @@ mod tests {
 
 #[macro_use]
 extern crate quick_error;
+
+#[macro_use]
+extern crate nom;
+
+#[macro_use]
+extern crate data_encoding_macro;
 
 pub use libraw_sys::libraw_colordata_t;
 
@@ -184,7 +192,7 @@ impl RawFile {
     }
 
     pub fn raw_data(&self) -> &[u16] {
-        let sizes = unsafe {(*self.libraw)}.rawdata.sizes;
+        let sizes = unsafe { (*self.libraw) }.rawdata.sizes;
         let num_shorts = sizes.raw_width as usize * sizes.raw_height as usize;
         unsafe { slice::from_raw_parts((*self.libraw).rawdata.raw_image, num_shorts) }
     }

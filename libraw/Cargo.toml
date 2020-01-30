@@ -9,3 +9,6 @@ edition = "2018"
 [dependencies]
 libraw-sys = { path = "../libraw-sys" }
 quick-error = "1.2.3"
+nom = "5.1.0"
+memmap = "0.7.0"
+data-encoding-macro = "0.1.7"
