@@ -102,22 +102,16 @@ impl<'a> IfdEntry<'a> {
         }
     }
 
-    pub fn val_u32(&self) -> u32 {
-        // Should probably do errors if this isn't right
-        assert!(
-            match self.field_type {
-                FieldType::Byte | FieldType::Short | FieldType::Long | FieldType::Unknown(_) =>
-                    true,
-                _ => false,
-            },
-            "Got bad type"
-        );
-        assert_eq!(self.count, 1);
-        u32::from_le_bytes(*self.value_offset)
-    }
-
-    pub fn as_typed<T>(&self) -> Option<TypedIfdEntry<T>> {
-        None
+    pub fn val_u32(&self) -> Option<u32> {
+        // Should probably do errors if this isn't right, rather than asserting
+        match self.field_type {
+            FieldType::Byte | FieldType::Short | FieldType::Long | FieldType::Unknown(_) => {}
+            _ => return None,
+        };
+        if self.count != 1 {
+            return None;
+        }
+        Some(u32::from_le_bytes(*self.value_offset))
     }
 }
 

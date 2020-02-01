@@ -1,8 +1,12 @@
+use crate::tiff::IfdEntry;
 use crate::{tiff, Color};
+use core::fmt;
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
 use nom::error::{make_error, ErrorKind, ParseError};
+use nom::lib::std::collections::HashMap;
+use nom::lib::std::fmt::{Error, Formatter};
 use nom::multi::count;
 use nom::number::complete::{be_u16, be_u32};
 use nom::sequence::tuple;
@@ -172,15 +176,46 @@ struct RafFile<'a> {
     raw: &'a [u8],
 }
 
-fn parse_tiffish(raw: &[u8]) -> IResult<I, ()> {
+struct RenderData {
+    width: Width,
+    height: Height,
+    bit_depth: u16,
+}
+
+fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let (_, tiff) = tiff::parse_tiff(raw)?;
     let ifd_block = &tiff[0][0];
-    let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32() as usize)..])?;
+    let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32().unwrap() as usize)..])?;
     assert!(next.is_none());
-    for thing in ifd {
-        println!("{:?}", thing);
+
+    for thing in &ifd {
+        println!("{:?}, {:?}", thing, thing.val_u32());
     }
-    Ok((raw, ()))
+
+    let hm: HashMap<u16, &IfdEntry> = ifd.iter().map(|item| (item.tag, item)).collect();
+    let width = hm[&61441].val_u32().unwrap();
+    let height = hm[&61442].val_u32().unwrap();
+    let bit_depth = hm[&61443].val_u32().unwrap();
+    // _Maybe_ data offset + length for compressed?
+    // Pretty sure this is data offset
+    let img_data_offset = hm[&61447].val_u32().unwrap();
+    // 20743472 is this number, it's very large. 449024 is where the TIFF starts
+    // 20743472 + 449024 = 21192496 ... is in middle of data, + 2048 is end of file.
+    // it's the length of the compressed section.
+    let img_data_length = hm[&61448].val_u32().unwrap();
+    // Back to unknown, it's 142 which could mean _anything_.
+    let _49 = hm[&61449].val_u32().unwrap();
+    // Maybe black levels or something, there's 36 longs
+    let _50 = hm[&61450];
+
+    Ok((
+        raw,
+        RenderData {
+            width: width as Width,
+            height: height as Height,
+            bit_depth: bit_depth as u16,
+        },
+    ))
 }
 
 fn parse_all(input: I) -> IResult<I, RafFile> {
