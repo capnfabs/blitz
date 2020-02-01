@@ -1,4 +1,5 @@
 pub mod raf;
+mod tiff;
 
 #[cfg(test)]
 mod tests {
@@ -83,6 +84,17 @@ impl Color {
             Color::Green => [0, 1, 0],
             Color::Blue => [0, 0, 1],
         }
+    }
+}
+
+struct XTransMapping<'a> {
+    data: &'a [u8],
+    sensor_width: usize,
+}
+
+impl<'a> XTransMapping<'a> {
+    pub fn color_at(&self, x: usize, y: usize) -> Color {
+        Color::from(self.data[y * self.sensor_width + x] as i8).unwrap()
     }
 }
 

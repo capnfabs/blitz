@@ -1,7 +1,5 @@
-#[macro_use]
-extern crate clap;
-
 use chrono::prelude::*;
+use clap::{App, Arg};
 use directories::UserDirs;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
@@ -16,33 +14,32 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-fn main() {
-    let matches = clap_app!(blitz =>
-        (version: "1.0")
-        (author: "Fabian Tamp (https://capnfabs.net/contact)")
-        (about: "Does awesome things")
-        (@arg CONFIG: -c --config +takes_value "Sets a custom config file")
-        (@arg INPUT: +required "Sets the input file to use")
-        (@arg debug: -d ... "Sets the level of debugging information")
-        (@subcommand test =>
-            (about: "controls testing features")
-            (version: "1.3")
-            (author: "Someone E. <someone_else@other.com>")
-            (@arg verbose: -v --verbose "Print test information verbosely")
-        )
-    )
-    .get_matches();
+#[macro_use]
+extern crate clap;
 
-    let _x = libraw::raf::parse_raf(matches.value_of("INPUT").unwrap());
-    let file = RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
+fn main() {
+    let matches = App::new("Blitz")
+        .arg(Arg::with_name("render").short("r").long("render"))
+        .arg(Arg::with_name("INPUT").required(true).index(1))
+        .get_matches();
+
+    let input = matches.value_of("INPUT").unwrap();
+    let render = matches.occurrences_of("render") == 1;
+
+    let _x = libraw::raf::parse_raf(input);
+
+    println!("Loading RAW data");
+    let file = RawFile::open(input).unwrap();
+    println!("Opened file: {:?}", file);
+
     dump_details(&file);
-    return;
+
+    if !render {
+        return;
+    }
 
     let raw_preview_filename = get_output_path();
 
-    println!("Loading RAW data");
-    let file = RawFile::open(matches.value_of("INPUT").unwrap()).unwrap();
-    println!("Opened file: {:?}", file);
     println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");

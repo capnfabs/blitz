@@ -1,5 +1,8 @@
+use crate::{tiff, Color};
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
+use nom::combinator::all_consuming;
+use nom::error::{make_error, ErrorKind, ParseError};
 use nom::multi::count;
 use nom::number::complete::{be_u16, be_u32};
 use nom::sequence::tuple;
@@ -86,19 +89,68 @@ impl OffsetLength {
     }
 }
 
+type Height = u16;
+type Width = u16;
+
 #[derive(Debug)]
-struct MetaTag<'a> {
-    tag_num: u16,
-    data: &'a [u8],
+enum Tag<'a> {
+    XTransMapping(&'a [u8]), //6x6 grid with the Xtrans mapping, 0-1-2s represent colors
+    HeightWidthSensor(Height, Width),
+    CropTopLeft(Height, Width), // Crop Top Left? According to Exiftool. Unclear what this is in reference to
+    HeightWidthCrop(Height, Width), // Raw Image cropped Size"
+    HeightWidthCrop2(Height, Width), // ???
+    HeightWidthCrop3(Height, Width), // ???
+    AspectRatio(u16, u16),      // u16 / u16 (height / width)
+    RAFData(&'a [u8]),
+    Unknown(u16, &'a [u8]),
 }
 
-fn metadata_internal_tag(input: I) -> IResult<I, MetaTag> {
+fn parse_tag<'a, E: ParseError<&'a [u8]>>(code: u16, data: &'a [u8]) -> Result<Tag, nom::Err<E>> {
+    let res = match code {
+        0x0131 => Tag::XTransMapping(data),
+        0x0100 => {
+            let (_, (h, w)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::HeightWidthSensor(h, w)
+        }
+        0x0110 => {
+            let (_, (h, w)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::CropTopLeft(h, w)
+        } // Possibly Crop Top left? I get 21x16.
+        0x0111 => {
+            let (_, (h, w)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::HeightWidthCrop(h, w)
+        }
+        0x0112 => {
+            let (_, (h, w)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::HeightWidthCrop2(h, w)
+        }
+        0x0113 => {
+            let (_, (h, w)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::HeightWidthCrop3(h, w)
+        }
+        0x0115 => {
+            let (_, (y, x)) = all_consuming(tuple((be_u16, be_u16)))(data)?;
+            Tag::AspectRatio(y, x)
+        }
+        /*
+        0x0130 => Tag::Unknown3,
+        0x0141 => Tag::Unknown4,
+        0x9650 => Tag::Unknown5, // dcraw: apparently something exposure related? midpointshift?
+        */
+        0xC000 => Tag::RAFData(data),
+        other => Tag::Unknown(other, data),
+    };
+    Ok(res)
+}
+
+fn metadata_internal_tag(input: I) -> IResult<I, Tag> {
     let (input, (tag_num, len)) = tuple((be_u16, be_u16))(input)?;
     let (input, data) = take(len)(input)?;
-    Ok((input, MetaTag { tag_num, data }))
+    let tag = parse_tag(tag_num, data)?;
+    Ok((input, tag))
 }
 
-type ImgMeta<'a> = Vec<MetaTag<'a>>;
+type ImgMeta<'a> = Vec<Tag<'a>>;
 
 fn parse_metadata(input: I) -> IResult<I, ImgMeta> {
     let (i, (_, meta_items_count)) = tuple((
@@ -111,37 +163,33 @@ fn parse_metadata(input: I) -> IResult<I, ImgMeta> {
     Ok((i, meta))
 }
 
-enum Tags {
-    XTransMapping = 0x0131, //6x6 grid with the Xtrans mapping, 0-1-2s represent colors
-    HeightWidthSensor = 0x0100,
-    Unknown1 = 0x0110,         // Crop Top Left? According to Exiftool
-    HeightWidthCrop = 0x0111,  // Raw Image cropped Size"
-    HeightWidthCrop2 = 0x0112, // ???
-    HeightWidthCrop3 = 0x0113, // ???
-    Unknown2 = 0x0115,         // "Raw Image Aspect Ratio"
-    Unknown3 = 0x0130,         // 0C0C0C0C
-    Unknown4 = 0x0141,         // ???
-    Unknown5 = 0x9650,         // FFB80064
-    // Some of the data in here is _little endian_ flips of the Height / Width crop stuff. I don't know what's going on.
-    // There's the prefix setting in there somewhere too (DSCF, ROFL on mine).
-    // This contains a huge amount of data; it goes to the end of the META section.
-    // According to ExifTool site, this is the RAFData. Not much info at all https://exiftool.org/TagNames/FujiFilm.html#RAFData.
-    Unknown6 = 0xC000,
-}
-
 #[derive(Debug)]
 struct RafFile<'a> {
     header: Header<'a>,
     jpg_preview: &'a [u8],
+    // This is in the middle RAF section
     metadata: ImgMeta<'a>,
     raw: &'a [u8],
 }
+
+fn parse_tiffish(raw: &[u8]) -> IResult<I, ()> {
+    let (_, tiff) = tiff::parse_tiff(raw)?;
+    let ifd_block = &tiff[0][0];
+    let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32() as usize)..])?;
+    assert!(next.is_none());
+    for thing in ifd {
+        println!("{:?}", thing);
+    }
+    Ok((raw, ()))
+}
+
 fn parse_all(input: I) -> IResult<I, RafFile> {
     let (i, (header, offsets)) = tuple((header, offset_sizes))(input)?;
     println!("Offsets {:?}", offsets);
     let jpg_preview = offsets.jpeg.apply(input);
     let metadata = offsets.metadata.apply(input);
     let raw = offsets.raw.apply(input);
+    let wump = parse_tiffish(raw);
     let (i, metadata) = parse_metadata(metadata)?;
     Ok((
         i,
