@@ -1,7 +1,7 @@
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::map;
 use nom::multi::count;
-use nom::number::complete::{le_u16, le_u32};
+use nom::number::complete::{le_f32, le_f64, le_i16, le_i32, le_u16, le_u32};
 use nom::sequence::tuple;
 use nom::IResult;
 use std::convert::TryInto;
@@ -10,7 +10,10 @@ use tristate::TriState;
 
 pub type I<'a> = &'a [u8];
 
-type TiffFile<'a> = Vec<Ifd<'a>>;
+pub struct TiffFile<'a> {
+    pub ifds: Vec<Ifd<'a>>,
+    data: &'a [u8],
+}
 
 #[derive(Debug, PartialEq)]
 pub struct IfdEntry<'a> {
@@ -31,7 +34,7 @@ pub struct TypedIfdEntry<'a, T> {
     p: PhantomData<T>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FieldType {
     Byte,
     Ascii,
@@ -88,6 +91,56 @@ impl From<u16> for FieldType {
     }
 }
 
+struct Rational(u32, u32);
+struct SRational(i32, i32);
+
+trait Parseable: Sized {
+    fn type_matches(t: FieldType) -> bool;
+    fn parse(input: I, count: usize) -> Vec<Self>;
+}
+
+impl Parseable for u32 {
+    fn type_matches(t: FieldType) -> bool {
+        match t {
+            FieldType::Long => true,
+            _ => false,
+        }
+    }
+
+    fn parse(input: &[u8], c: usize) -> Vec<Self> {
+        let res: IResult<I, Vec<u32>> = count(le_u32, c)(input);
+        let (i, val) = res.unwrap();
+        val
+    }
+}
+
+impl Parseable for SRational {
+    fn type_matches(t: FieldType) -> bool {
+        t == FieldType::SRational
+    }
+
+    fn parse(input: &[u8], c: usize) -> Vec<Self> {
+        let res: IResult<I, Vec<SRational>> =
+            count(map(tuple((le_i32, le_i32)), |(a, b)| SRational(a, b)), c)(input);
+        let (i, val) = res.unwrap();
+        val
+    }
+}
+
+/*
+match self.field_type {
+            FieldType::Short => count(le_u16, c)(input),
+            FieldType::Long => ,
+            FieldType::Rational => count(tuple((le_u32, le_u32)), c),
+            FieldType::SShort => count(le_i16, c),
+            FieldType::SLong => count(le_i32, c),
+            FieldType::SRational => count(tuple((le_i32, le_i32)), c),
+            FieldType::Float => count(le_f32, c),
+            FieldType::Double => count(le_f64, c),
+            _ => take(c),
+        }
+*/
+
 impl<'a> IfdEntry<'a> {
     pub fn value_byte_size(&self) -> Option<usize> {
         let item_size = self.field_type.type_size()?;
@@ -102,6 +155,15 @@ impl<'a> IfdEntry<'a> {
         }
     }
 
+    // this wasn't working before and then I added the lifetime, and now it works :-/
+    fn parse<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
+        let c = self.count as usize;
+        if !T::type_matches(self.field_type) {
+            return None;
+        }
+        Some(T::parse(input, self.count as usize))
+    }
+
     pub fn val_u32(&self) -> Option<u32> {
         // Should probably do errors if this isn't right, rather than asserting
         match self.field_type {
@@ -112,6 +174,29 @@ impl<'a> IfdEntry<'a> {
             return None;
         }
         Some(u32::from_le_bytes(*self.value_offset))
+    }
+
+    fn val_offset(&self) -> Option<usize> {
+        if self.value_inlined() == TriState::Yes {
+            None
+        } else {
+            // We don't use usize directly because the size changes on
+            // different platforms, and as per TIFF spec this is u32.
+            Some(u32::from_le_bytes(*self.value_offset) as usize)
+        }
+    }
+
+    fn load_from_offset<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
+        println!("Attempting offset fetch");
+        let offset = self.val_offset()?;
+        println!("Got offset {}", offset);
+        self.parse(&input[offset..])
+    }
+}
+
+impl<'a> TiffFile<'a> {
+    pub fn load_offset_data<T: Parseable>(&self, ifd_entry: &IfdEntry<'a>) -> Option<Vec<T>> {
+        ifd_entry.load_from_offset(self.data)
     }
 }
 
@@ -154,7 +239,7 @@ pub fn parse_tiff(input: I) -> IResult<I, TiffFile> {
         }
     }
 
-    Ok((input, ifds))
+    Ok((input, TiffFile { ifds, data: input }))
 }
 
 #[cfg(test)]
@@ -167,8 +252,8 @@ mod tests {
         let result = parse_tiff(data);
         assert!(result.is_ok());
         let (_, result) = result.unwrap();
-        assert_eq!(result.len(), 1);
-        let ifd = &result[0];
+        assert_eq!(result.ifds.len(), 1);
+        let ifd = &result.ifds[0];
         assert_eq!(ifd.len(), 1);
         let ifde = &ifd[0];
         assert_eq!(ifde.tag, 0xF000);

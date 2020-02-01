@@ -176,15 +176,17 @@ struct RafFile<'a> {
     raw: &'a [u8],
 }
 
+#[derive(Debug)]
 struct RenderData {
     width: Width,
     height: Height,
     bit_depth: u16,
+    black_levels: Vec<u32>,
 }
 
 fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let (_, tiff) = tiff::parse_tiff(raw)?;
-    let ifd_block = &tiff[0][0];
+    let ifd_block = &tiff.ifds[0][0];
     let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32().unwrap() as usize)..])?;
     assert!(next.is_none());
 
@@ -206,7 +208,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     // Back to unknown, it's 142 which could mean _anything_.
     let _49 = hm[&61449].val_u32().unwrap();
     // Maybe black levels or something, there's 36 longs
-    let _50 = hm[&61450];
+    let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
 
     Ok((
         raw,
@@ -214,6 +216,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
             width: width as Width,
             height: height as Height,
             bit_depth: bit_depth as u16,
+            black_levels,
         },
     ))
 }
@@ -224,7 +227,8 @@ fn parse_all(input: I) -> IResult<I, RafFile> {
     let jpg_preview = offsets.jpeg.apply(input);
     let metadata = offsets.metadata.apply(input);
     let raw = offsets.raw.apply(input);
-    let wump = parse_tiffish(raw);
+    let (_, wump) = parse_tiffish(raw)?;
+    println!("wump!\n{:#?}", wump);
     let (i, metadata) = parse_metadata(metadata)?;
     Ok((
         i,
@@ -247,7 +251,7 @@ where
     match res {
         Ok((_rest, info)) => {
             println!("{:?}", info.header);
-            println!("{:?}", info.metadata);
+            //println!("{:?}", info.metadata);
         }
         Err(e) => println!("Something went wrong: {:?}", e),
     }
