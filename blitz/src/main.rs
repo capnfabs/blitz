@@ -14,9 +14,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[macro_use]
-extern crate clap;
-
 fn main() {
     let matches = App::new("Blitz")
         .arg(Arg::with_name("render").short("r").long("render"))
@@ -214,6 +211,7 @@ impl<'a> Iterator for ImageLayoutIterator<'a> {
     }
 }
 
+#[allow(dead_code)] // Candidate for inclusion later.
 fn enumerate_xy(width: Axis, height: Axis, data: &[Value]) -> ImageLayoutIterator {
     ImageLayoutIterator {
         width,
@@ -432,10 +430,11 @@ fn saturating_downcast(val: f32) -> u8 {
     }
 }
 
+#[allow(dead_code)] // Debug method
 fn dump_sample(label: &str, pixels: Vec<Pixel<u16>>) {
     // these are different from the C++
     let width = 6048;
-    let height = 4038;
+    let _height = 4038;
     let crop_width = 512;
     let crop_height = 512;
     let start_col = 3834;

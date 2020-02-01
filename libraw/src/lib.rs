@@ -13,9 +13,6 @@ mod tests {
 extern crate quick_error;
 
 #[macro_use]
-extern crate nom;
-
-#[macro_use]
 extern crate data_encoding_macro;
 
 pub use libraw_sys::libraw_colordata_t;
@@ -87,11 +84,13 @@ impl Color {
     }
 }
 
+#[allow(dead_code)] // We'll use this eventually instead of the other thing
 struct XTransMapping<'a> {
     data: &'a [u8],
     sensor_width: usize,
 }
 
+#[allow(dead_code)]
 impl<'a> XTransMapping<'a> {
     pub fn color_at(&self, x: usize, y: usize) -> Color {
         Color::from(self.data[y * self.sensor_width + x] as i8).unwrap()

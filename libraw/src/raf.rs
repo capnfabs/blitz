@@ -1,12 +1,10 @@
-use crate::tiff::IfdEntry;
-use crate::{tiff, Color};
-use core::fmt;
+use crate::tiff;
+use crate::tiff::{IfdEntry, SRational};
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
-use nom::error::{make_error, ErrorKind, ParseError};
+use nom::error::ParseError;
 use nom::lib::std::collections::HashMap;
-use nom::lib::std::fmt::{Error, Formatter};
 use nom::multi::count;
 use nom::number::complete::{be_u16, be_u32};
 use nom::sequence::tuple;
@@ -200,16 +198,37 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let bit_depth = hm[&61443].val_u32().unwrap();
     // _Maybe_ data offset + length for compressed?
     // Pretty sure this is data offset
-    let img_data_offset = hm[&61447].val_u32().unwrap();
+    let _img_data_offset = hm[&61447].val_u32().unwrap();
     // 20743472 is this number, it's very large. 449024 is where the TIFF starts
     // 20743472 + 449024 = 21192496 ... is in middle of data, + 2048 is end of file.
     // it's the length of the compressed section.
-    let img_data_length = hm[&61448].val_u32().unwrap();
+    let _img_data_length = hm[&61448].val_u32().unwrap();
     // Back to unknown, it's 142 which could mean _anything_.
     let _49 = hm[&61449].val_u32().unwrap();
     // Maybe black levels or something, there's 36 longs
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
+    // This looks like some kind of curve, but it's not clear.
+    // The first item is [something] / [size], the next is 'stops' (1/10, 2/10, 3/10 etc), the next is `value / 1000.`
+    // I don't know what the 3605 is (first [something]) or why things are out of 1000.
+    let _51: Vec<SRational> = tiff.load_offset_data(hm[&61451]).unwrap();
 
+    println!("51! {:#?}", _51);
+
+    // unclear what this is, here's the values [302, 384, 837, 17, 302, 657, 479, 21,]
+    let _52: Vec<u32> = tiff.load_offset_data(hm[&61452]).unwrap();
+    println!("52! {:#?}", _52);
+    // These two are both white balance coefficients, not sure what the difference is
+    let _53: Vec<u32> = tiff.load_offset_data(hm[&61453]).unwrap();
+    println!("53! {:#?}", _53);
+    let _54: Vec<u32> = tiff.load_offset_data(hm[&61454]).unwrap();
+    println!("54! {:#?}", _54);
+
+    // These two are both curves as well, don't know what's in them though.
+    // All the curves start with 3605/11 or /10
+    let _55: Vec<SRational> = tiff.load_offset_data(hm[&61455]).unwrap();
+    println!("55! {:#?}", _55);
+    let _56: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
+    println!("56! {:#?}", _56);
     Ok((
         raw,
         RenderData {
@@ -222,7 +241,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
 }
 
 fn parse_all(input: I) -> IResult<I, RafFile> {
-    let (i, (header, offsets)) = tuple((header, offset_sizes))(input)?;
+    let (_, (header, offsets)) = tuple((header, offset_sizes))(input)?;
     println!("Offsets {:?}", offsets);
     let jpg_preview = offsets.jpeg.apply(input);
     let metadata = offsets.metadata.apply(input);

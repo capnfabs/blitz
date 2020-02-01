@@ -1,7 +1,7 @@
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::map;
 use nom::multi::count;
-use nom::number::complete::{le_f32, le_f64, le_i16, le_i32, le_u16, le_u32};
+use nom::number::complete::{le_i32, le_u16, le_u32};
 use nom::sequence::tuple;
 use nom::IResult;
 use std::convert::TryInto;
@@ -66,7 +66,7 @@ impl FieldType {
             FieldType::SRational => Some(8),
             FieldType::Float => Some(4),
             FieldType::Double => Some(8),
-            FieldType::Unknown(u16) => None,
+            FieldType::Unknown(_) => None,
         }
     }
 }
@@ -91,10 +91,13 @@ impl From<u16> for FieldType {
     }
 }
 
-struct Rational(u32, u32);
-struct SRational(i32, i32);
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Rational(u32, u32);
 
-trait Parseable: Sized {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct SRational(i32, i32);
+
+pub trait Parseable: Sized {
     fn type_matches(t: FieldType) -> bool;
     fn parse(input: I, count: usize) -> Vec<Self>;
 }
@@ -109,7 +112,7 @@ impl Parseable for u32 {
 
     fn parse(input: &[u8], c: usize) -> Vec<Self> {
         let res: IResult<I, Vec<u32>> = count(le_u32, c)(input);
-        let (i, val) = res.unwrap();
+        let (_, val) = res.unwrap();
         val
     }
 }
@@ -122,12 +125,13 @@ impl Parseable for SRational {
     fn parse(input: &[u8], c: usize) -> Vec<Self> {
         let res: IResult<I, Vec<SRational>> =
             count(map(tuple((le_i32, le_i32)), |(a, b)| SRational(a, b)), c)(input);
-        let (i, val) = res.unwrap();
+        let (_, val) = res.unwrap();
         val
     }
 }
 
 /*
+// Keeping this here until I manage to write thingies for the other types
 match self.field_type {
             FieldType::Short => count(le_u16, c)(input),
             FieldType::Long => ,
@@ -150,14 +154,13 @@ impl<'a> IfdEntry<'a> {
     pub fn value_inlined(&self) -> TriState {
         match self.value_byte_size() {
             Some(size_) if size_ > 4 => TriState::No,
-            Some(size_) => TriState::Yes,
+            Some(_) => TriState::Yes,
             None => TriState::Unknown,
         }
     }
 
     // this wasn't working before and then I added the lifetime, and now it works :-/
     fn parse<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
-        let c = self.count as usize;
         if !T::type_matches(self.field_type) {
             return None;
         }
