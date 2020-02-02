@@ -330,24 +330,11 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
-    let saturating_scale = |p: Pixel<u16>| -> Pixel<u16> {
-        Pixel {
-            red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
-            green: min(
-                p.green as u32 * scale_factors[1] as u32,
-                std::u16::MAX as u32,
-            ) as u16,
-            blue: min(
-                p.blue as u32 * scale_factors[2] as u32,
-                std::u16::MAX as u32,
-            ) as u16,
-        }
-    };
 
     let buf = ImageBuffer::from_fn(
         img.img_params().raw_width / DBG_CROP_FACTOR,
         img.img_params().raw_height / DBG_CROP_FACTOR,
-        |x, y| saturating_scale(_passthru_demosaic(x, y)).to_rgb(),
+        |x, y| saturating_scale(_passthru_demosaic(x, y), &scale_factors).to_rgb(),
     );
     println!("Done rendering");
     buf
@@ -366,9 +353,6 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
 
     let img_data: Vec<u16> = img.raw_data.iter().copied().map(|v| black_sub(v)).collect();
 
-    println!("img raw data length {}", img.raw_data.len());
-    println!("Computing max on img with size {}", img_data.len());
-
     // hot pixel elimination through a hard-coded filter lol
     let max = img_data
         .iter()
@@ -378,7 +362,8 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
         .max()
         .unwrap();
 
-    let img_grid = Grid::wrap(&img.raw_data, img.width, img.height);
+    let img_grid = Grid::wrap(&img_data, img.width, img.height);
+
     let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
@@ -451,25 +436,26 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
     println!("scale_factors: {:?}", scale_factors);
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
     println!("scale_factors: {:?}", scale_factors);
-    let saturating_scale = |p: Pixel<u16>| -> Pixel<u16> {
-        Pixel {
-            red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
-            green: min(
-                p.green as u32 * scale_factors[1] as u32,
-                std::u16::MAX as u32,
-            ) as u16,
-            blue: min(
-                p.blue as u32 * scale_factors[2] as u32,
-                std::u16::MAX as u32,
-            ) as u16,
-        }
-    };
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
-        saturating_scale(_passthru_demosaic(x as u16, y as u16)).to_rgb()
+        saturating_scale(_passthru_demosaic(x as u16, y as u16), &scale_factors).to_rgb()
     });
     println!("Done rendering");
     buf
+}
+
+fn saturating_scale(p: Pixel<u16>, scale_factors: &[u16]) -> Pixel<u16> {
+    Pixel {
+        red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
+        green: min(
+            p.green as u32 * scale_factors[1] as u32,
+            std::u16::MAX as u32,
+        ) as u16,
+        blue: min(
+            p.blue as u32 * scale_factors[2] as u32,
+            std::u16::MAX as u32,
+        ) as u16,
+    }
 }
 
 struct BlackValues {

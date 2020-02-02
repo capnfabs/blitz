@@ -182,7 +182,7 @@ pub struct ParsedRafFile<'a> {
 impl<'a> ParsedRafFile<'a> {
     pub fn render_info(&self) -> RenderInfo {
         // Oh boy
-        let xtrans: Vec<Color> = self
+        let mut xtrans: Vec<Color> = self
             .metadata
             .iter()
             .filter_map(|it| match it {
@@ -194,6 +194,8 @@ impl<'a> ParsedRafFile<'a> {
             .iter()
             .map(|num| Color::from(*num as i8).unwrap())
             .collect();
+        // This is _backwards_ in the file.
+        xtrans.reverse();
         RenderInfo {
             width: self.tiffish.width,
             height: self.tiffish.height,
