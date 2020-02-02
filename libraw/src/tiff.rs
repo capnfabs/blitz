@@ -190,9 +190,7 @@ impl<'a> IfdEntry<'a> {
     }
 
     fn load_from_offset<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
-        println!("Attempting offset fetch");
         let offset = self.val_offset()?;
-        println!("Got offset {}", offset);
         self.parse(&input[offset..])
     }
 }

@@ -1,5 +1,5 @@
 use crate::tiff;
-use crate::tiff::{IfdEntry, SRational};
+use crate::tiff::IfdEntry;
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
@@ -12,11 +12,16 @@ use nom::IResult;
 use std::fs::File;
 use std::path::Path;
 
+type I<'a> = &'a [u8];
+
 quick_error! {
     #[derive(Debug)]
     pub enum RafError {
         Io(err: std::io::Error) {
             from()
+        }
+        // I don't know how to capture nom:Err here, so we're stuck with this.
+        Unknown {
         }
     }
 }
@@ -26,8 +31,6 @@ struct Header<'a> {
     model: &'a str,
     fw_version: &'a str,
 }
-
-type I<'a> = &'a [u8];
 
 fn str_from_fixed_len_buf(input: I) -> &str {
     if let Some(idx) = input.iter().position(|&elem| elem == 0) {
@@ -166,7 +169,7 @@ fn parse_metadata(input: I) -> IResult<I, ImgMeta> {
 }
 
 #[derive(Debug)]
-struct RafFile<'a> {
+pub struct ParsedRafFile<'a> {
     header: Header<'a>,
     jpg_preview: &'a [u8],
     // This is in the middle RAF section
@@ -179,7 +182,27 @@ struct RenderData {
     width: Width,
     height: Height,
     bit_depth: u16,
-    black_levels: Vec<u32>,
+    black_levels: Vec<u16>,
+    white_bal: WhiteBalCoefficients,
+}
+
+#[derive(Debug)]
+struct Grid<'a, T: Copy> {
+    data: &'a [T],
+    width: Width,
+}
+
+impl<'a, T: Copy> Grid<'a, T> {
+    pub fn at(&self, x: Width, y: Height) -> T {
+        self.data[(y * self.width) as usize + x as usize]
+    }
+}
+
+#[derive(Debug)]
+struct WhiteBalCoefficients {
+    red: u16,
+    green: u16,
+    blue: u16,
 }
 
 fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
@@ -188,14 +211,10 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32().unwrap() as usize)..])?;
     assert!(next.is_none());
 
-    for thing in &ifd {
-        println!("{:?}, {:?}", thing, thing.val_u32());
-    }
-
     let hm: HashMap<u16, &IfdEntry> = ifd.iter().map(|item| (item.tag, item)).collect();
-    let width = hm[&61441].val_u32().unwrap();
-    let height = hm[&61442].val_u32().unwrap();
-    let bit_depth = hm[&61443].val_u32().unwrap();
+    let width = hm[&61441].val_u32().unwrap() as Width;
+    let height = hm[&61442].val_u32().unwrap() as Height;
+    let bit_depth = hm[&61443].val_u32().unwrap() as u16;
     // _Maybe_ data offset + length for compressed?
     // Pretty sure this is data offset
     let _img_data_offset = hm[&61447].val_u32().unwrap();
@@ -207,51 +226,42 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let _49 = hm[&61449].val_u32().unwrap();
     // Maybe black levels or something, there's 36 longs
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
-    // This looks like some kind of curve, but it's not clear.
-    // The first item is [something] / [size], the next is 'stops' (1/10, 2/10, 3/10 etc), the next is `value / 1000.`
-    // I don't know what the 3605 is (first [something]) or why things are out of 1000.
-    let _51: Vec<SRational> = tiff.load_offset_data(hm[&61451]).unwrap();
+    let black_levels: Vec<u16> = black_levels.iter().map(|x| *x as u16).collect();
 
-    println!("51! {:#?}", _51);
+    // Note that tag 61454 had the same values on all the files I tested -
+    // not sure what the difference is. DCRAW uses '54 and not '53.
+    let wb: Vec<u32> = tiff.load_offset_data(hm[&61453]).unwrap();
+    let wb = WhiteBalCoefficients {
+        red: wb[0] as u16,
+        green: wb[1] as u16,
+        blue: wb[2] as u16,
+    };
 
-    // unclear what this is, here's the values [302, 384, 837, 17, 302, 657, 479, 21,]
-    let _52: Vec<u32> = tiff.load_offset_data(hm[&61452]).unwrap();
-    println!("52! {:#?}", _52);
-    // These two are both white balance coefficients, not sure what the difference is
-    let _53: Vec<u32> = tiff.load_offset_data(hm[&61453]).unwrap();
-    println!("53! {:#?}", _53);
-    let _54: Vec<u32> = tiff.load_offset_data(hm[&61454]).unwrap();
-    println!("54! {:#?}", _54);
+    // '51, '52, '55, '56 all look like some kind of curve.
+    // The first number looks like x/y axis lengths, then x positions, then y positions.
 
-    // These two are both curves as well, don't know what's in them though.
-    // All the curves start with 3605/11 or /10
-    let _55: Vec<SRational> = tiff.load_offset_data(hm[&61455]).unwrap();
-    println!("55! {:#?}", _55);
-    let _56: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
-    println!("56! {:#?}", _56);
     Ok((
         raw,
         RenderData {
-            width: width as Width,
-            height: height as Height,
-            bit_depth: bit_depth as u16,
+            width,
+            height,
+            bit_depth,
             black_levels,
+            white_bal: wb,
         },
     ))
 }
 
-fn parse_all(input: I) -> IResult<I, RafFile> {
+fn parse_all(input: I) -> IResult<I, ParsedRafFile> {
     let (_, (header, offsets)) = tuple((header, offset_sizes))(input)?;
-    println!("Offsets {:?}", offsets);
     let jpg_preview = offsets.jpeg.apply(input);
     let metadata = offsets.metadata.apply(input);
     let raw = offsets.raw.apply(input);
     let (_, wump) = parse_tiffish(raw)?;
-    println!("wump!\n{:#?}", wump);
     let (i, metadata) = parse_metadata(metadata)?;
     Ok((
         i,
-        RafFile {
+        ParsedRafFile {
             header,
             jpg_preview,
             metadata,
@@ -260,19 +270,24 @@ fn parse_all(input: I) -> IResult<I, RafFile> {
     ))
 }
 
-pub fn parse_raf<P>(path: P) -> Result<(), RafError>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(path)?;
-    let mmap = unsafe { Mmap::map(&file) }?;
-    let res = parse_all(&mmap);
-    match res {
-        Ok((_rest, info)) => {
-            println!("{:?}", info.header);
-            //println!("{:?}", info.metadata);
-        }
-        Err(e) => println!("Something went wrong: {:?}", e),
+#[derive(Debug)]
+pub struct RafFile {
+    file: File,
+    mmap: Mmap,
+}
+
+impl RafFile {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<RafFile, RafError> {
+        let file = File::open(path)?;
+        let mmap = unsafe { Mmap::map(&file) }?;
+        Ok(RafFile { file, mmap })
     }
-    Ok(())
+
+    pub fn parse_raw(&self) -> Result<ParsedRafFile, RafError> {
+        let result = parse_all(&self.mmap);
+        match result {
+            Ok((_, parsed)) => Ok(parsed),
+            Err(e) => Err(RafError::Unknown),
+        }
+    }
 }

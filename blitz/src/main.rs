@@ -4,6 +4,7 @@ use directories::UserDirs;
 use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
+use libraw::raf::RafFile;
 use libraw::{Color, RawFile, XTransPixelMap};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
@@ -23,24 +24,36 @@ fn main() {
     let input = matches.value_of("INPUT").unwrap();
     let render = matches.occurrences_of("render") == 1;
 
-    let _x = libraw::raf::parse_raf(input);
+    load_and_maybe_render_native(input, render);
+    load_and_maybe_render_libraw(input, render);
+}
 
-    println!("Loading RAW data");
-    let file = RawFile::open(input).unwrap();
+fn load_and_maybe_render_native(img_file: &str, render: bool) {
+    println!("Loading RAW data: native");
+    let file = RafFile::open(img_file).unwrap();
     println!("Opened file: {:?}", file);
+    println!("Parsing...");
+    let details = file.parse_raw().unwrap();
 
-    dump_details(&file);
+    println!("Parsed.");
 
     if !render {
         return;
     }
+}
 
+fn load_and_maybe_render_libraw(img_file: &str, render: bool) {
+    println!("Loading RAW data: libraw");
+    let file = RawFile::open(img_file).unwrap();
+    println!("Opened file: {:?}", file);
+    dump_details(&file);
+    if !render {
+        return;
+    }
     let raw_preview_filename = get_output_path();
-
     println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");
-
     preview
         .save_with_format(&raw_preview_filename, ImageFormat::TIFF)
         .unwrap();
@@ -50,7 +63,6 @@ fn main() {
     p.set_readonly(true);
     fs::set_permissions(&raw_preview_filename, p).unwrap();
     println!("Done saving");
-
     open_preview(&raw_preview_filename);
 }
 
