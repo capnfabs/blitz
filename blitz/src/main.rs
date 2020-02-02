@@ -258,29 +258,6 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let width = img.img_params().raw_width as usize;
     let height = img.img_params().raw_height as usize;
 
-    let _passthru_demosaic = |x: Axis, y: Axis, v: u16| -> Pixel<u16> {
-        let x = x as usize;
-        let y = y as usize;
-        let color = mapping[y % 6][x % 6];
-        match color {
-            Color::Red => Pixel {
-                red: v,
-                blue: 0,
-                green: 0,
-            },
-            Color::Green => Pixel {
-                red: 0,
-                blue: 0,
-                green: v,
-            },
-            Color::Blue => Pixel {
-                red: 0,
-                blue: v,
-                green: 0,
-            },
-        }
-    };
-
     let black_vals = BlackValues::wrap(img.colordata());
 
     let black_sub = |val: u16| -> u16 { val.saturating_sub(black_vals.black_val()) };
@@ -307,6 +284,30 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
             red: img_data[r_idx],
             green: img_data[g_idx],
             blue: img_data[b_idx],
+        }
+    };
+
+    let _passthru_demosaic = |x: Axis, y: Axis| -> Pixel<u16> {
+        let x = x as usize;
+        let y = y as usize;
+        let v = img_data[pixel_idx(x, y, width, height, Offset { x: 0, y: 0 })];
+        let color = mapping[y % 6][x % 6];
+        match color {
+            Color::Red => Pixel {
+                red: v,
+                blue: 0,
+                green: 0,
+            },
+            Color::Green => Pixel {
+                red: 0,
+                blue: 0,
+                green: v,
+            },
+            Color::Blue => Pixel {
+                red: 0,
+                blue: v,
+                green: 0,
+            },
         }
     };
 
@@ -346,7 +347,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let buf = ImageBuffer::from_fn(
         img.img_params().raw_width / DBG_CROP_FACTOR,
         img.img_params().raw_height / DBG_CROP_FACTOR,
-        |x, y| saturating_scale(demosaic(x, y)).to_rgb(),
+        |x, y| saturating_scale(_passthru_demosaic(x, y)).to_rgb(),
     );
     println!("Done rendering");
     buf
@@ -378,7 +379,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
         .unwrap();
 
     let img_grid = Grid::wrap(&img.raw_data, img.width, img.height);
-    let demosaic = |x: u32, y: u32| -> Pixel<u16> {
+    let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let offsets = find_offsets_native(&mapping, x as Width, y as Height);
@@ -407,6 +408,28 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
             red: img_data[r_idx],
             green: img_data[g_idx],
             blue: img_data[b_idx],
+        }
+    };
+
+    let _passthru_demosaic = |x: Width, y: Height| -> Pixel<u16> {
+        let color = mapping.at(x, y);
+        let v = img_grid.at(x, y);
+        match color {
+            Color::Red => Pixel {
+                red: v,
+                blue: 0,
+                green: 0,
+            },
+            Color::Green => Pixel {
+                red: 0,
+                blue: 0,
+                green: v,
+            },
+            Color::Blue => Pixel {
+                red: 0,
+                blue: v,
+                green: 0,
+            },
         }
     };
 
@@ -443,7 +466,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
     };
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
-        saturating_scale(demosaic(x, y)).to_rgb()
+        saturating_scale(_passthru_demosaic(x as u16, y as u16)).to_rgb()
     });
     println!("Done rendering");
     buf
