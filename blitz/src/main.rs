@@ -2,9 +2,9 @@ use chrono::prelude::*;
 use clap::{App, Arg};
 use directories::UserDirs;
 use git2::Repository;
-use image::{ImageBuffer, ImageFormat};
+use image::{ImageBuffer, ImageFormat, Rgb};
 use itertools::Itertools;
-use libraw::raf::RafFile;
+use libraw::raf::{Grid, Height, ParsedRafFile, RafFile, Width};
 use libraw::{Color, RawFile, XTransPixelMap};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
@@ -40,6 +40,20 @@ fn load_and_maybe_render_native(img_file: &str, render: bool) {
     if !render {
         return;
     }
+
+    let raw_preview_filename = get_output_path("native");
+    let preview = render_raw_preview_native(&details);
+    println!("Saving");
+    preview
+        .save_with_format(&raw_preview_filename, ImageFormat::TIFF)
+        .unwrap();
+    let metadata = fs::metadata(&raw_preview_filename).unwrap();
+    // Set readonly so that I don't accidentally save over it later.
+    let mut p = metadata.permissions();
+    p.set_readonly(true);
+    fs::set_permissions(&raw_preview_filename, p).unwrap();
+    println!("Done saving");
+    open_preview(&raw_preview_filename);
 }
 
 fn load_and_maybe_render_libraw(img_file: &str, render: bool) {
@@ -50,7 +64,7 @@ fn load_and_maybe_render_libraw(img_file: &str, render: bool) {
     if !render {
         return;
     }
-    let raw_preview_filename = get_output_path();
+    let raw_preview_filename = get_output_path("libraw");
     println!("Rendering...");
     let preview = render_raw_preview(&file);
     println!("Saving");
@@ -66,14 +80,15 @@ fn load_and_maybe_render_libraw(img_file: &str, render: bool) {
     open_preview(&raw_preview_filename);
 }
 
-fn get_output_path() -> PathBuf {
+fn get_output_path(label: &str) -> PathBuf {
     let ud = UserDirs::new().unwrap();
     let download_dir = ud.download_dir().unwrap();
     let utc: DateTime<Utc> = Utc::now();
     let filename = format!(
-        "render-{0}-rev{1}.tiff",
+        "render-{0}-rev{1}-{2}.tiff",
         utc.format("%F-%H%M%S"),
-        &git_sha_descriptor()[..7]
+        &git_sha_descriptor()[..7],
+        label,
     );
     download_dir.join(filename)
 }
@@ -337,6 +352,103 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     buf
 }
 
+fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
+    let img = &img.render_info();
+
+    // Change 14 bit to 16 bit.
+    //let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
+
+    let mapping = Grid::wrap(&img.xtrans_mapping, 6, 6);
+
+    // Should fix this lol
+    let black_sub = |val: u16| -> u16 { val.saturating_sub(1022) };
+
+    let img_data: Vec<u16> = img.raw_data.iter().copied().map(|v| black_sub(v)).collect();
+
+    println!("img raw data length {}", img.raw_data.len());
+    println!("Computing max on img with size {}", img_data.len());
+
+    // hot pixel elimination through a hard-coded filter lol
+    let max = img_data
+        .iter()
+        // TODO: this is hardcoded!
+        .filter(|v| **v < 6000)
+        .copied()
+        .max()
+        .unwrap();
+
+    let img_grid = Grid::wrap(&img.raw_data, img.width, img.height);
+    let demosaic = |x: u32, y: u32| -> Pixel<u16> {
+        let x = x as usize;
+        let y = y as usize;
+        let offsets = find_offsets_native(&mapping, x as Width, y as Height);
+        let r_idx = pixel_idx(
+            x,
+            y,
+            img.width as usize,
+            img.height as usize,
+            offsets[Color::Red.idx()],
+        );
+        let g_idx = pixel_idx(
+            x,
+            y,
+            img.width as usize,
+            img.height as usize,
+            offsets[Color::Green.idx()],
+        );
+        let b_idx = pixel_idx(
+            x,
+            y,
+            img.width as usize,
+            img.height as usize,
+            offsets[Color::Blue.idx()],
+        );
+        Pixel {
+            red: img_data[r_idx],
+            green: img_data[g_idx],
+            blue: img_data[b_idx],
+        }
+    };
+
+    // Compute scaling params
+    println!("Overall max: {:}", max);
+    // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
+    // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
+    // how they work.
+
+    // Let's do some WB.
+    let wb = img.white_bal;
+    let scale_factors =
+        make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32, 0.0]);
+    println!("scale_factors: {:?}", scale_factors);
+    let scale_factors: Vec<f32> = scale_factors
+        .iter()
+        .map(|val| val * (std::u16::MAX as f32) / max as f32)
+        .collect();
+    println!("scale_factors: {:?}", scale_factors);
+    let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
+    println!("scale_factors: {:?}", scale_factors);
+    let saturating_scale = |p: Pixel<u16>| -> Pixel<u16> {
+        Pixel {
+            red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
+            green: min(
+                p.green as u32 * scale_factors[1] as u32,
+                std::u16::MAX as u32,
+            ) as u16,
+            blue: min(
+                p.blue as u32 * scale_factors[2] as u32,
+                std::u16::MAX as u32,
+            ) as u16,
+        }
+    };
+
+    let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
+        saturating_scale(demosaic(x, y)).to_rgb()
+    });
+    println!("Done rendering");
+    buf
+}
+
 struct BlackValues {
     black: u16,
 }
@@ -375,6 +487,19 @@ const CHECK_ORDER: [Offset; 5] = [
     Offset { x: 0, y: -1 },
 ];
 
+fn offset_for_color_native(mapping: &Grid<Color>, color: Color, x: Width, y: Height) -> Offset {
+    for offset in CHECK_ORDER.iter() {
+        if mapping.at(
+            (x as i32 + offset.x as i32).rem_euclid(6) as Width,
+            (y as i32 + offset.y as i32).rem_euclid(6) as Height,
+        ) == color
+        {
+            return offset.clone();
+        }
+    }
+    panic!("Shouldn't get here")
+}
+
 fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
     for offset in CHECK_ORDER.iter() {
         if mapping[((y as i32 + offset.y as i32).rem_euclid(6)) as usize]
@@ -396,6 +521,17 @@ fn find_offsets(mapping: &XTransPixelMap, x: usize, y: usize) -> [Offset; 3] {
         offset_for_color(mapping, Color::Red, x, y),
         offset_for_color(mapping, Color::Green, x, y),
         offset_for_color(mapping, Color::Blue, x, y),
+    ]
+}
+
+fn find_offsets_native(mapping: &Grid<Color>, x: Width, y: Height) -> [Offset; 3] {
+    // Ok so, every pixel has every color within one of the offsets from it.
+    // This doesn't apply on edges but we're going to just ignore edges until we
+    // figure out if the basic technique works.
+    [
+        offset_for_color_native(mapping, Color::Red, x, y),
+        offset_for_color_native(mapping, Color::Green, x, y),
+        offset_for_color_native(mapping, Color::Blue, x, y),
     ]
 }
 

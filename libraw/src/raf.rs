@@ -1,12 +1,14 @@
-use crate::tiff;
+use crate::raf::Tag::XTransMapping;
 use crate::tiff::IfdEntry;
+use crate::{tiff, Color};
+use itertools::Itertools;
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
-use nom::error::ParseError;
+use nom::error::{context, ParseError};
 use nom::lib::std::collections::HashMap;
 use nom::multi::count;
-use nom::number::complete::{be_u16, be_u32};
+use nom::number::complete::{be_u16, be_u32, le_u16};
 use nom::sequence::tuple;
 use nom::IResult;
 use std::fs::File;
@@ -94,8 +96,8 @@ impl OffsetLength {
     }
 }
 
-type Height = u16;
-type Width = u16;
+pub type Height = u16;
+pub type Width = u16;
 
 #[derive(Debug)]
 enum Tag<'a> {
@@ -174,42 +176,101 @@ pub struct ParsedRafFile<'a> {
     jpg_preview: &'a [u8],
     // This is in the middle RAF section
     metadata: ImgMeta<'a>,
-    raw: &'a [u8],
+    tiffish: TiffishData,
+}
+
+impl<'a> ParsedRafFile<'a> {
+    pub fn render_info(&self) -> RenderInfo {
+        // Oh boy
+        let xtrans: Vec<Color> = self
+            .metadata
+            .iter()
+            .filter_map(|it| match it {
+                XTransMapping(val) => Some(*val),
+                _ => None,
+            })
+            .exactly_one()
+            .unwrap()
+            .iter()
+            .map(|num| Color::from(*num as i8).unwrap())
+            .collect();
+        RenderInfo {
+            width: self.tiffish.width,
+            height: self.tiffish.height,
+            bit_depth: self.tiffish.bit_depth,
+            black_levels: self.tiffish.black_levels.clone(),
+            white_bal: self.tiffish.white_bal.clone(),
+            xtrans_mapping: xtrans,
+            raw_data: &self.tiffish.raw_data,
+        }
+    }
 }
 
 #[derive(Debug)]
-struct RenderData {
+struct TiffishData {
     width: Width,
     height: Height,
     bit_depth: u16,
     black_levels: Vec<u16>,
     white_bal: WhiteBalCoefficients,
+    raw_data: Vec<u16>,
+}
+
+pub struct RenderInfo<'a> {
+    pub width: Width,
+    pub height: Height,
+    pub bit_depth: u16,
+    pub black_levels: Vec<u16>,
+    pub white_bal: WhiteBalCoefficients,
+    pub xtrans_mapping: Vec<Color>,
+    pub raw_data: &'a Vec<u16>,
 }
 
 #[derive(Debug)]
-struct Grid<'a, T: Copy> {
+pub struct Grid<'a, T: Copy> {
     data: &'a [T],
-    width: Width,
+    grid_width: Width,
+    grid_height: Height,
 }
 
 impl<'a, T: Copy> Grid<'a, T> {
     pub fn at(&self, x: Width, y: Height) -> T {
-        self.data[(y * self.width) as usize + x as usize]
+        let x = x.rem_euclid(self.grid_width);
+        let y = y.rem_euclid(self.grid_height);
+        self.data[(y as usize * self.grid_width as usize) + x as usize]
+    }
+
+    pub fn wrap(vals: &'a [T], grid_width: Width, grid_height: Height) -> Self {
+        if grid_height as usize * grid_width as usize != vals.len() {
+            panic!("Noooooooo")
+        }
+        Grid {
+            data: vals,
+            grid_width,
+            grid_height,
+        }
     }
 }
 
-#[derive(Debug)]
-struct WhiteBalCoefficients {
-    red: u16,
-    green: u16,
-    blue: u16,
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct WhiteBalCoefficients {
+    pub red: u16,
+    pub green: u16,
+    pub blue: u16,
 }
 
-fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
+fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     let (_, tiff) = tiff::parse_tiff(raw)?;
     let ifd_block = &tiff.ifds[0][0];
     let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32().unwrap() as usize)..])?;
     assert!(next.is_none());
+
+    for entry in &ifd {
+        println!(
+            "Tag {:?}, type={:?}, count={:?} ",
+            entry.tag, entry.field_type, entry.count
+        );
+    }
 
     let hm: HashMap<u16, &IfdEntry> = ifd.iter().map(|item| (item.tag, item)).collect();
     let width = hm[&61441].val_u32().unwrap() as Width;
@@ -217,37 +278,59 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, RenderData> {
     let bit_depth = hm[&61443].val_u32().unwrap() as u16;
     // _Maybe_ data offset + length for compressed?
     // Pretty sure this is data offset
-    let _img_data_offset = hm[&61447].val_u32().unwrap();
+    let img_byte_offset = hm[&61447].val_u32().unwrap() as usize;
     // 20743472 is this number, it's very large. 449024 is where the TIFF starts
     // 20743472 + 449024 = 21192496 ... is in middle of data, + 2048 is end of file.
-    // it's the length of the compressed section.
-    let _img_data_length = hm[&61448].val_u32().unwrap();
-    // Back to unknown, it's 142 which could mean _anything_.
+    // it's the length (in bytes) of the data section.
+    let img_byte_count = hm[&61448].val_u32().unwrap() as usize;
+    let img_num_u16 = img_byte_count / 2;
+    println!(
+        "img is at {} and length {}",
+        img_byte_offset, img_byte_count
+    );
+    // No idea what this magic value is
     let _49 = hm[&61449].val_u32().unwrap();
-    // Maybe black levels or something, there's 36 longs
+    println!("49: {:#?}", _49);
+
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
     let black_levels: Vec<u16> = black_levels.iter().map(|x| *x as u16).collect();
 
+    // No idea what this one is either; it's 8 numbers, looks wb related
+    // because _52[0] and _52[4] == _53[0].
+    let _52: Vec<u32> = tiff.load_offset_data(hm[&61452]).unwrap();
+    println!("52: {:#?}", _52);
+
     // Note that tag 61454 had the same values on all the files I tested -
     // not sure what the difference is. DCRAW uses '54 and not '53.
-    let wb: Vec<u32> = tiff.load_offset_data(hm[&61453]).unwrap();
+    // Alright, on my COMPRESSED RAW FILE test (2827), '54 and '53 were the same
+    // values. On the uncompressed test (6281) they're different, and '53 isn't right.
+    let wb: Vec<u32> = tiff.load_offset_data(hm[&61454]).unwrap();
     let wb = WhiteBalCoefficients {
-        red: wb[0] as u16,
-        green: wb[1] as u16,
+        // The order here in the RAF file is green, red, blue.
+        // TODO: maybe this is similar to how TIFF does it?
+        red: wb[1] as u16,
+        green: wb[0] as u16,
         blue: wb[2] as u16,
     };
+
+    let (_, img_data) = all_consuming(count(le_u16, img_num_u16))(
+        &raw[img_byte_offset..(img_byte_offset + img_byte_count)],
+    )?;
+
+    println!("Got {} shorts", img_data.len());
 
     // '51, '52, '55, '56 all look like some kind of curve.
     // The first number looks like x/y axis lengths, then x positions, then y positions.
 
     Ok((
         raw,
-        RenderData {
+        TiffishData {
             width,
             height,
             bit_depth,
             black_levels,
             white_bal: wb,
+            raw_data: img_data,
         },
     ))
 }
@@ -257,7 +340,7 @@ fn parse_all(input: I) -> IResult<I, ParsedRafFile> {
     let jpg_preview = offsets.jpeg.apply(input);
     let metadata = offsets.metadata.apply(input);
     let raw = offsets.raw.apply(input);
-    let (_, wump) = parse_tiffish(raw)?;
+    let (_, tiffish) = parse_tiffish(raw)?;
     let (i, metadata) = parse_metadata(metadata)?;
     Ok((
         i,
@@ -265,7 +348,7 @@ fn parse_all(input: I) -> IResult<I, ParsedRafFile> {
             header,
             jpg_preview,
             metadata,
-            raw,
+            tiffish,
         },
     ))
 }
@@ -287,7 +370,7 @@ impl RafFile {
         let result = parse_all(&self.mmap);
         match result {
             Ok((_, parsed)) => Ok(parsed),
-            Err(e) => Err(RafError::Unknown),
+            Err(_) => Err(RafError::Unknown),
         }
     }
 }
