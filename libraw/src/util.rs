@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 type X = usize;
 type Y = usize;
 
@@ -49,6 +51,7 @@ impl std::ops::Add<Offset> for Position {
 pub trait Grid<'a, T: Copy> {
     fn size(&self) -> Size;
     fn at(&self, offset: Position) -> T;
+    fn row(&self, which: Y) -> &[T];
 }
 
 #[derive(Debug)]
@@ -64,13 +67,35 @@ pub fn wrap<T: Copy>(vals: &[T], size: Size) -> DataGrid<T> {
     DataGrid { data: vals, size }
 }
 
-struct WrapperGrid<'a, T: Copy> {
-    grid: &'a DataGrid<'a, T>,
-    anchor_pos: Position,
-    size: Size,
+pub fn subgrid<'a, G, T>(grid: &'a G, offset: Position, size: Size) -> impl Grid<'a, T>
+where
+    G: Grid<'a, T>,
+    T: Copy,
+{
+    WrapperGrid {
+        grid,
+        anchor_pos: offset,
+        size,
+        _pd: PhantomData,
+    }
 }
 
-impl<'a, T: Copy> Grid<'a, T> for WrapperGrid<'a, T> {
+struct WrapperGrid<'a, G, T>
+where
+    G: Grid<'a, T>,
+    T: Copy,
+{
+    grid: &'a G,
+    anchor_pos: Position,
+    size: Size,
+    _pd: PhantomData<T>,
+}
+
+impl<'a, G, T> Grid<'a, T> for WrapperGrid<'a, G, T>
+where
+    G: Grid<'a, T>,
+    T: Copy,
+{
     fn size(&self) -> Size {
         self.size
     }
@@ -81,6 +106,12 @@ impl<'a, T: Copy> Grid<'a, T> for WrapperGrid<'a, T> {
         let x = x.rem_euclid(width);
         let y = y.rem_euclid(height);
         self.grid.at(Position(x, y))
+    }
+
+    fn row(&self, which: Y) -> &[T] {
+        let Size(width, _) = self.size;
+        let Position(_, y) = Position(0, which).extending(self.anchor_pos);
+        &self.grid.row(y)[0..width]
     }
 }
 
@@ -96,19 +127,9 @@ impl<'a, T: Copy> Grid<'a, T> for DataGrid<'a, T> {
         let y = y.rem_euclid(height);
         self.data[y * width + x]
     }
-}
 
-impl<'a, T: Copy> DataGrid<'a, T> {
-    pub fn row(&self, which: Y) -> &[T] {
+    fn row(&self, which: Y) -> &[T] {
         let Size(width, _) = self.size;
         &self.data[which * width..(which + 1) * width]
-    }
-
-    pub fn subgrid(&'a self, offset: Position, size: Size) -> impl Grid<'a, T> {
-        WrapperGrid {
-            grid: &self,
-            anchor_pos: offset,
-            size,
-        }
     }
 }
