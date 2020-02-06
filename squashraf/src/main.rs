@@ -17,7 +17,6 @@ fn main() {
 }
 
 const STRIPE_WIDTH: usize = 768;
-//const LINE_HEIGHT: usize = 6;
 
 fn squash_raf(img_file: &str) {
     println!("Loading RAW data: libraw");

@@ -278,7 +278,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let mapping: Vec<Color> = mapping.iter().flatten().copied().collect_vec();
     let mapping = util::wrap(&mapping, Size(6, 6));
     let img_grid = util::wrap(&img_data, Size(width, height));
-    let demosaic = |x: u32, y: u32| -> Pixel<u16> {
+    let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let offsets = find_offsets_native(&mapping, Position(x, y));
@@ -335,7 +335,7 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
     let buf = ImageBuffer::from_fn(
         img.img_params().raw_width / DBG_CROP_FACTOR,
         img.img_params().raw_height / DBG_CROP_FACTOR,
-        |x, y| saturating_scale(_passthru_demosaic(x, y), &scale_factors).to_rgb(),
+        |x, y| saturating_scale(_demosaic(x, y), &scale_factors).to_rgb(),
     );
     println!("Done rendering");
     buf
@@ -365,7 +365,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
 
     let img_grid = util::wrap(&img_data, Size(img.width as usize, img.height as usize));
 
-    let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
+    let _demosaic = |x: u16, y: u16| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let pixel = Position(x, y);
@@ -420,7 +420,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
     println!("scale_factors: {:?}", scale_factors);
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
-        saturating_scale(_passthru_demosaic(x as u16, y as u16), &scale_factors).to_rgb()
+        saturating_scale(_demosaic(x as u16, y as u16), &scale_factors).to_rgb()
     });
     println!("Done rendering");
     buf
@@ -478,7 +478,13 @@ fn offset_for_color_native(mapping: &DataGrid<Color>, color: Color, pos: Positio
             return candidate_pos;
         }
     }
-    panic!("Shouldn't get here")
+    let Position(a, b) = pos;
+    if a == 0 || b == 0 {
+        // The edges are kinda messed up, so just return the original position
+        pos
+    } else {
+        panic!("Shouldn't get here")
+    }
 }
 
 fn find_offsets_native(mapping: &DataGrid<Color>, pos: Position) -> [Position; 3] {
