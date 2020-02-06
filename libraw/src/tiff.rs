@@ -159,7 +159,6 @@ impl<'a> IfdEntry<'a> {
         }
     }
 
-    // this wasn't working before and then I added the lifetime, and now it works :-/
     fn parse<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
         if !T::type_matches(self.field_type) {
             return None;

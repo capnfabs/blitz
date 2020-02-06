@@ -2,10 +2,11 @@ use chrono::prelude::*;
 use clap::{App, Arg};
 use directories::UserDirs;
 use git2::Repository;
-use image::{ImageBuffer, ImageFormat, Rgb};
+use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
-use libraw::raf::{Grid, Height, ParsedRafFile, RafFile, Width};
-use libraw::{Color, RawFile, XTransPixelMap};
+use libraw::raf::{ParsedRafFile, RafFile};
+use libraw::util::{DataGrid, Grid, Offset, Position, Size};
+use libraw::{util, Color, RawFile};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
 use std::cmp::min;
@@ -61,6 +62,7 @@ fn load_and_maybe_render_libraw(img_file: &str, render: bool) {
     let file = RawFile::open(img_file).unwrap();
     println!("Opened file: {:?}", file);
     dump_details(&file);
+
     if !render {
         return;
     }
@@ -273,25 +275,24 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
         .max()
         .unwrap();
 
+    let mapping: Vec<Color> = mapping.iter().flatten().copied().collect_vec();
+    let mapping = util::wrap(&mapping, Size(6, 6));
+    let img_grid = util::wrap(&img_data, Size(width, height));
     let demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
-        let offsets = find_offsets(&mapping, x, y);
-        let r_idx = pixel_idx(x, y, width, height, offsets[Color::Red.idx()]);
-        let g_idx = pixel_idx(x, y, width, height, offsets[Color::Green.idx()]);
-        let b_idx = pixel_idx(x, y, width, height, offsets[Color::Blue.idx()]);
+        let offsets = find_offsets_native(&mapping, Position(x, y));
         Pixel {
-            red: img_data[r_idx],
-            green: img_data[g_idx],
-            blue: img_data[b_idx],
+            red: img_grid.at(offsets[Color::Red.idx()]),
+            green: img_grid.at(offsets[Color::Green.idx()]),
+            blue: img_grid.at(offsets[Color::Blue.idx()]),
         }
     };
 
     let _passthru_demosaic = |x: Axis, y: Axis| -> Pixel<u16> {
-        let x = x as usize;
-        let y = y as usize;
-        let v = img_data[pixel_idx(x, y, width, height, Offset { x: 0, y: 0 })];
-        let color = mapping[y % 6][x % 6];
+        let pos = Position(x as usize, y as usize);
+        let v = img_grid.at(pos);
+        let color = mapping.at(pos);
         match color {
             Color::Red => Pixel {
                 red: v,
@@ -346,7 +347,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
     // Change 14 bit to 16 bit.
     //let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
 
-    let mapping = Grid::wrap(&img.xtrans_mapping, 6, 6);
+    let mapping = util::wrap(&img.xtrans_mapping, Size(6, 6));
 
     // Should fix this lol
     let black_sub = |val: u16| -> u16 { val.saturating_sub(1022) };
@@ -362,43 +363,24 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
         .max()
         .unwrap();
 
-    let img_grid = Grid::wrap(&img_data, img.width, img.height);
+    let img_grid = util::wrap(&img_data, Size(img.width as usize, img.height as usize));
 
     let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
-        let offsets = find_offsets_native(&mapping, x as Width, y as Height);
-        let r_idx = pixel_idx(
-            x,
-            y,
-            img.width as usize,
-            img.height as usize,
-            offsets[Color::Red.idx()],
-        );
-        let g_idx = pixel_idx(
-            x,
-            y,
-            img.width as usize,
-            img.height as usize,
-            offsets[Color::Green.idx()],
-        );
-        let b_idx = pixel_idx(
-            x,
-            y,
-            img.width as usize,
-            img.height as usize,
-            offsets[Color::Blue.idx()],
-        );
+        let pixel = Position(x, y);
+        let offsets = find_offsets_native(&mapping, pixel);
         Pixel {
-            red: img_data[r_idx],
-            green: img_data[g_idx],
-            blue: img_data[b_idx],
+            red: img_grid.at(offsets[Color::Red.idx()]),
+            green: img_grid.at(offsets[Color::Green.idx()]),
+            blue: img_grid.at(offsets[Color::Blue.idx()]),
         }
     };
 
-    let _passthru_demosaic = |x: Width, y: Height| -> Pixel<u16> {
-        let color = mapping.at(x, y);
-        let v = img_grid.at(x, y);
+    let _passthru_demosaic = |x: u16, y: u16| -> Pixel<u16> {
+        let pos = Position(x as usize, y as usize);
+        let v = img_grid.at(pos);
+        let color = mapping.at(pos);
         match color {
             Color::Red => Pixel {
                 red: v,
@@ -482,83 +464,32 @@ impl BlackValues {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-struct Offset {
-    x: i8,
-    y: i8,
-}
-
 const CHECK_ORDER: [Offset; 5] = [
-    Offset { x: 0, y: 0 },
-    Offset { x: 0, y: 1 },
-    Offset { x: 1, y: 0 },
-    Offset { x: -1, y: 0 },
-    Offset { x: 0, y: -1 },
+    Offset(0, 0),
+    Offset(0, 1),
+    Offset(1, 0),
+    Offset(-1, 0),
+    Offset(0, -1),
 ];
 
-fn offset_for_color_native(mapping: &Grid<Color>, color: Color, x: Width, y: Height) -> Offset {
-    for offset in CHECK_ORDER.iter() {
-        if mapping.at(
-            (x as i32 + offset.x as i32).rem_euclid(6) as Width,
-            (y as i32 + offset.y as i32).rem_euclid(6) as Height,
-        ) == color
-        {
-            return offset.clone();
+fn offset_for_color_native(mapping: &DataGrid<Color>, color: Color, pos: Position) -> Position {
+    for candidate_pos in CHECK_ORDER.iter().map(|offset| pos + *offset) {
+        if mapping.at(candidate_pos) == color {
+            return candidate_pos;
         }
     }
     panic!("Shouldn't get here")
 }
 
-fn offset_for_color(mapping: &XTransPixelMap, color: Color, x: usize, y: usize) -> Offset {
-    for offset in CHECK_ORDER.iter() {
-        if mapping[((y as i32 + offset.y as i32).rem_euclid(6)) as usize]
-            [((x as i32 + offset.x as i32).rem_euclid(6)) as usize]
-            == color
-        {
-            return offset.clone();
-        }
-    }
-    panic!("Shouldn't get here")
-}
-
-// Returns one offset per color.
-fn find_offsets(mapping: &XTransPixelMap, x: usize, y: usize) -> [Offset; 3] {
+fn find_offsets_native(mapping: &DataGrid<Color>, pos: Position) -> [Position; 3] {
     // Ok so, every pixel has every color within one of the offsets from it.
     // This doesn't apply on edges but we're going to just ignore edges until we
     // figure out if the basic technique works.
     [
-        offset_for_color(mapping, Color::Red, x, y),
-        offset_for_color(mapping, Color::Green, x, y),
-        offset_for_color(mapping, Color::Blue, x, y),
+        offset_for_color_native(mapping, Color::Red, pos),
+        offset_for_color_native(mapping, Color::Green, pos),
+        offset_for_color_native(mapping, Color::Blue, pos),
     ]
-}
-
-fn find_offsets_native(mapping: &Grid<Color>, x: Width, y: Height) -> [Offset; 3] {
-    // Ok so, every pixel has every color within one of the offsets from it.
-    // This doesn't apply on edges but we're going to just ignore edges until we
-    // figure out if the basic technique works.
-    [
-        offset_for_color_native(mapping, Color::Red, x, y),
-        offset_for_color_native(mapping, Color::Green, x, y),
-        offset_for_color_native(mapping, Color::Blue, x, y),
-    ]
-}
-
-fn pixel_idx(x: usize, y: usize, width: usize, height: usize, offset: Offset) -> usize {
-    let mut offset_y = y as i32 + offset.y as i32;
-    if offset_y < 0 {
-        offset_y = 0;
-    }
-    let mut offset_x = x as i32 + offset.x as i32;
-    if offset_x < 0 {
-        offset_x = 0;
-    }
-    let idx = (offset_y as u32 * (width as u32) + offset_x as u32) as usize;
-    if idx < (width * height) as usize {
-        idx
-    } else {
-        0
-    }
 }
 
 /// Returns whitebalance coefficients normalized such that the smallest is 1

@@ -1,20 +1,26 @@
+use crate::raf::EncodingType::{Compressed, Uncompressed, Unknown};
 use crate::raf::Tag::XTransMapping;
 use crate::tiff::IfdEntry;
-use crate::{tiff, Color};
+use crate::{fuji_compressed, tiff, Color};
 use itertools::Itertools;
 use memmap::Mmap;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
-use nom::error::{context, ParseError};
+use nom::error::ParseError;
 use nom::lib::std::collections::HashMap;
 use nom::multi::count;
 use nom::number::complete::{be_u16, be_u32, le_u16};
 use nom::sequence::tuple;
 use nom::IResult;
+use std::fmt::Debug;
 use std::fs::File;
 use std::path::Path;
+use tristate::TriState::No;
 
 type I<'a> = &'a [u8];
+
+type Width = u16;
+type Height = u16;
 
 quick_error! {
     #[derive(Debug)]
@@ -95,9 +101,6 @@ impl OffsetLength {
         &input[start..end]
     }
 }
-
-pub type Height = u16;
-pub type Width = u16;
 
 #[derive(Debug)]
 enum Tag<'a> {
@@ -228,37 +231,29 @@ pub struct RenderInfo<'a> {
     pub raw_data: &'a Vec<u16>,
 }
 
-#[derive(Debug)]
-pub struct Grid<'a, T: Copy> {
-    data: &'a [T],
-    grid_width: Width,
-    grid_height: Height,
-}
-
-impl<'a, T: Copy> Grid<'a, T> {
-    pub fn at(&self, x: Width, y: Height) -> T {
-        let x = x.rem_euclid(self.grid_width);
-        let y = y.rem_euclid(self.grid_height);
-        self.data[(y as usize * self.grid_width as usize) + x as usize]
-    }
-
-    pub fn wrap(vals: &'a [T], grid_width: Width, grid_height: Height) -> Self {
-        if grid_height as usize * grid_width as usize != vals.len() {
-            panic!("Noooooooo")
-        }
-        Grid {
-            data: vals,
-            grid_width,
-            grid_height,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct WhiteBalCoefficients {
     pub red: u16,
     pub green: u16,
     pub blue: u16,
+}
+
+// This almost _certainly_ doesn't represent the full spectrum of options.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum EncodingType {
+    Compressed,
+    Uncompressed,
+    Unknown(u32),
+}
+
+impl From<u32> for EncodingType {
+    fn from(val: u32) -> Self {
+        match val {
+            136 => Uncompressed,
+            142 => Compressed,
+            val => Unknown(val),
+        }
+    }
 }
 
 fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
@@ -268,10 +263,22 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     assert!(next.is_none());
 
     for entry in &ifd {
-        println!(
-            "Tag {:?}, type={:?}, count={:?} ",
-            entry.tag, entry.field_type, entry.count
-        );
+        if entry.count < 20 {
+            let data: Box<dyn std::fmt::Debug> = if entry.value_inlined() == No {
+                Box::new(tiff.load_offset_data::<u32>(entry))
+            } else {
+                Box::new(entry.val_u32())
+            };
+            println!(
+                "Tag {:?}/{:x}, type={:?}, count={:?}, data:{:?}",
+                entry.tag, entry.tag, entry.field_type, entry.count, data,
+            );
+        } else {
+            println!(
+                "Tag {:?}, type={:?}, count={:?}, data redacted",
+                entry.tag, entry.field_type, entry.count
+            );
+        }
     }
 
     let hm: HashMap<u16, &IfdEntry> = ifd.iter().map(|item| (item.tag, item)).collect();
@@ -286,13 +293,12 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     // it's the length (in bytes) of the data section.
     let img_byte_count = hm[&61448].val_u32().unwrap() as usize;
     let img_num_u16 = img_byte_count / 2;
+    let img_encoding_type = EncodingType::from(hm[&61449].val_u32().unwrap());
+
     println!(
-        "img is at {} and length {}",
-        img_byte_offset, img_byte_count
+        "img is at {} and length {} with encoding {:?}",
+        img_byte_offset, img_byte_count, img_encoding_type
     );
-    // No idea what this magic value is
-    let _49 = hm[&61449].val_u32().unwrap();
-    println!("49: {:#?}", _49);
 
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
     let black_levels: Vec<u16> = black_levels.iter().map(|x| *x as u16).collect();
@@ -315,14 +321,26 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
         blue: wb[2] as u16,
     };
 
-    let (_, img_data) = all_consuming(count(le_u16, img_num_u16))(
-        &raw[img_byte_offset..(img_byte_offset + img_byte_count)],
-    )?;
+    let img_bytes = &raw[img_byte_offset..(img_byte_offset + img_byte_count)];
+
+    let decode_result = match img_encoding_type {
+        Compressed => fuji_compressed::load_fuji_compressed(img_bytes),
+        _ => all_consuming(count(le_u16, img_num_u16))(img_bytes),
+    };
+
+    let (_, img_data) = decode_result?;
 
     println!("Got {} shorts", img_data.len());
 
     // '51, '52, '55, '56 all look like some kind of curve.
     // The first number looks like x/y axis lengths, then x positions, then y positions.
+
+    // Compressed format:
+    // starts with 49530110 0E0FC618 0017A003 000802A1
+    // 2279 - sample 1 002AC570 002BDD80 002C5DB0 002CE430 002C4E30 002D5320 002D8750 00278810
+    // sample 2 002CEC80 002D2DB0 002D4F50 002D3C20 002CF900 002CBB40 002C35B0 00267620
+    // then next 644 bytes are identical.
+    // maybe they're 4 bit? unclear
 
     Ok((
         raw,

@@ -1,5 +1,7 @@
+mod fuji_compressed;
 pub mod raf;
 mod tiff;
+pub mod util;
 
 #[cfg(test)]
 mod tests {

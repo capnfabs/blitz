@@ -1,9 +1,8 @@
 [package]
-name = "blitz"
+name = "squashraf"
 version = "0.1.0"
 authors = ["Fabian Tamp <fabian.tamp@gmail.com>"]
 edition = "2018"
-default-run = "blitz"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
