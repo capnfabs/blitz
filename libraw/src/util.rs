@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 type X = usize;
 type Y = usize;
 
@@ -34,6 +32,12 @@ impl Position {
     fn extending(&self, reference: Position) -> Position {
         Position(self.0 + reference.0, self.1 + reference.1)
     }
+
+    fn wrap_within(self, size: Size) -> Position {
+        let Position(x, y) = self;
+        let Size(width, height) = size;
+        Position(x % width, y % height)
+    }
 }
 
 impl std::ops::Add<Offset> for Position {
@@ -48,88 +52,53 @@ impl std::ops::Add<Offset> for Position {
     }
 }
 
-pub trait Grid<'a, T: Copy> {
-    fn size(&self) -> Size;
-    fn at(&self, offset: Position) -> T;
-    fn row(&self, which: Y) -> &[T];
-}
-
 #[derive(Debug)]
 pub struct DataGrid<'a, T: Copy> {
     data: &'a [T],
+    data_size: Size,
     size: Size,
-}
-
-pub fn wrap<T: Copy>(vals: &[T], size: Size) -> DataGrid<T> {
-    if size.count() != vals.len() {
-        panic!("Noooooooo")
-    }
-    DataGrid { data: vals, size }
-}
-
-pub fn subgrid<'a, G, T>(grid: &'a G, offset: Position, size: Size) -> impl Grid<'a, T>
-where
-    G: Grid<'a, T>,
-    T: Copy,
-{
-    WrapperGrid {
-        grid,
-        anchor_pos: offset,
-        size,
-        _pd: PhantomData,
-    }
-}
-
-struct WrapperGrid<'a, G, T>
-where
-    G: Grid<'a, T>,
-    T: Copy,
-{
-    grid: &'a G,
     anchor_pos: Position,
-    size: Size,
-    _pd: PhantomData<T>,
 }
 
-impl<'a, G, T> Grid<'a, T> for WrapperGrid<'a, G, T>
-where
-    G: Grid<'a, T>,
-    T: Copy,
-{
-    fn size(&self) -> Size {
+impl<'a, T: Copy> DataGrid<'a, T> {
+    pub fn wrap(vals: &[T], size: Size) -> DataGrid<T> {
+        if size.count() != vals.len() {
+            panic!("dimensions of size and vals don't match up")
+        }
+        DataGrid {
+            data: vals,
+            data_size: size,
+            size,
+            anchor_pos: Position(0, 0),
+        }
+    }
+
+    pub fn subgrid(&self, offset: Position, size: Size) -> DataGrid<T> {
+        DataGrid {
+            data: &self.data,
+            data_size: self.data_size,
+            anchor_pos: offset.extending(self.anchor_pos),
+            size,
+        }
+    }
+
+    pub fn size(&self) -> Size {
         self.size
     }
 
-    fn at(&self, pos: Position) -> T {
-        let Position(x, y) = pos.extending(self.anchor_pos);
-        let Size(width, height) = self.size;
-        let x = x.rem_euclid(width);
-        let y = y.rem_euclid(height);
-        self.grid.at(Position(x, y))
+    pub fn at(&self, pos: Position) -> T {
+        let Position(data_x, data_y) = pos.wrap_within(self.size).extending(self.anchor_pos);
+
+        let Size(data_width, _) = self.data_size;
+
+        self.data[data_y * data_width + data_x]
     }
 
-    fn row(&self, which: Y) -> &[T] {
-        let Size(width, _) = self.size;
-        let Position(_, y) = Position(0, which).extending(self.anchor_pos);
-        &self.grid.row(y)[0..width]
-    }
-}
-
-impl<'a, T: Copy> Grid<'a, T> for DataGrid<'a, T> {
-    fn size(&self) -> Size {
-        self.size
-    }
-
-    fn at(&self, pos: Position) -> T {
-        let Position(x, y) = pos;
-        let Size(width, height) = self.size;
-        let x = x.rem_euclid(width);
-        let y = y.rem_euclid(height);
-        self.data[y * width + x]
-    }
-
-    fn row(&self, which: Y) -> &[T] {
-        let Size(width, _) = self.size;
-        &self.data[which * width..(which + 1) * width]
+    pub fn row(&self, which: Y) -> &[T] {
+        let Position(_, data_y) = Position(0, which).extending(self.anchor_pos);
+        let Size(row_width, _) = self.size;
+        let Size(data_width, _) = self.data_size;
+        let start = data_y * data_width;
+        &self.data[start..start + row_width]
     }
 }

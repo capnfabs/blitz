@@ -3,8 +3,8 @@
 
 use clap::{App, Arg};
 use itertools::Itertools;
-use libraw::util::{Grid, Position, Size};
-use libraw::{util, Color, RawFile};
+use libraw::util::{DataGrid, Position, Size};
+use libraw::{Color, RawFile};
 
 fn main() {
     let matches = App::new("Squashraf")
@@ -20,12 +20,12 @@ const STRIPE_WIDTH: usize = 768;
 // There's a max of 4 green pixels out of every 6, so we need 512 slots for every line of pixels
 const REQUIRED_CAPACITY: usize = STRIPE_WIDTH * 4 / 6;
 
-fn assign_into<'a, G: Grid<'a, Color>>(
+fn assign_into(
     reds: &mut [u16],
     greens: &mut [u16],
     blues: &mut [u16],
     row: &[u16],
-    row_map: G,
+    row_map: DataGrid<Color>,
 ) {
     for x in vec![&reds, &greens, &blues].iter() {
         assert_eq!(x.len(), REQUIRED_CAPACITY);
@@ -34,8 +34,12 @@ fn assign_into<'a, G: Grid<'a, Color>>(
 
     for (pos, val) in row.iter().enumerate() {
         // produces the sequence 0,1,1,2,3,3,4,5,5...
-        let squashed_idx = (pos - 1) * 2 / 3 + 1;
-        match row_map.at(Position(pos, 0)) {
+        let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
+        let color = row_map.at(Position(pos, 0));
+        if squashed_idx == 0 || squashed_idx == 1 {
+            println!("pos {}, squashed {}, color {:?}", pos, squashed_idx, color);
+        }
+        match color {
             Color::Red => reds[squashed_idx] = *val,
             Color::Green => greens[squashed_idx] = *val,
             Color::Blue => blues[squashed_idx] = *val,
@@ -74,12 +78,14 @@ fn fill_blanks(row: &mut [u16], rprev: &[u16], rprevprev: &[u16]) {
 // and this is bigger than that.
 const UNSET: u16 = 0xFFFF;
 
+const LOTS_OF_ZEROS: [u16; 512] = [0; 512];
+
 fn squash_raf(img_file: &str) {
     println!("Loading RAW data: libraw");
     let file = RawFile::open(img_file).unwrap();
     println!("Opened file: {:?}", file);
 
-    let img_grid = util::wrap(
+    let img_grid = DataGrid::wrap(
         file.raw_data(),
         Size(
             file.img_params().raw_width as usize,
@@ -92,44 +98,58 @@ fn squash_raf(img_file: &str) {
         .flatten()
         .copied()
         .collect_vec();
-    let cm = util::wrap(&xtmap, Size(6, 6));
-    let strip = util::subgrid(
+    let cm = DataGrid::wrap(&xtmap, Size(6, 6));
+    let strip = DataGrid::subgrid(
         &img_grid,
         Position(0, 0),
         Size(STRIPE_WIDTH, file.img_params().raw_height as usize),
     );
-    let line_no: usize = 6;
-    // grab the greens into g2
+    // TODO: calculate this!
+    // each 'line' is a block of 6x768
+    let num_lines = 673;
+    let zeros = LOTS_OF_ZEROS.to_vec();
+    // NOTE: later we'll modify this.
+    let prev_lines = vec![
+        vec![&zeros, &zeros],
+        vec![&zeros, &zeros],
+        vec![&zeros, &zeros],
+    ];
+    let num_lines = 1;
+    for line in 0..num_lines {
+        let line = DataGrid::subgrid(&strip, Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
+        let mut reds = vec![vec![0u16; 512]; 3];
+        let mut greens = vec![vec![0u16; 512]; 6];
+        let mut blues = vec![vec![0u16; 512]; 3];
+        for i in 0..6 {
+            assign_into(
+                &mut reds[i / 2],
+                &mut greens[i],
+                &mut blues[i / 2],
+                strip.row(i),
+                DataGrid::subgrid(&cm, Position(0, i), Size(6, 1)),
+            );
+        }
 
-    let r0: Vec<u16> = vec![UNSET; 512];
-    let r1: Vec<u16> = vec![UNSET; 512];
-    let b0: Vec<u16> = vec![UNSET; 512];
-    let b1: Vec<u16> = vec![UNSET; 512];
-    let mut g2: Vec<u16> = vec![UNSET; 512];
-    let mut g3: Vec<u16> = vec![UNSET; 512];
-    let mut r2: Vec<u16> = vec![UNSET; 512];
-    let mut b2: Vec<u16> = vec![UNSET; 512];
+        // blank filling code
+        let mut colors = vec![&mut reds, &mut greens, &mut blues];
+        for color_idx in 0..3 {
+            let prev_lines = &prev_lines[color_idx];
+            let color = &mut colors[color_idx];
+            for idx in 0..color.len() {
+                let (history, future) = color.split_at_mut(idx);
+                let (rprevprev, rprev) = match history.len() {
+                    0 => (prev_lines[0].as_slice(), prev_lines[1].as_slice()),
+                    1 => (prev_lines[1].as_slice(), history[0].as_slice()),
+                    idx => (history[idx - 2].as_slice(), history[idx - 1].as_slice()),
+                };
+                fill_blanks(future[0].as_mut_slice(), rprev, rprevprev)
+            }
+        }
 
-    assign_into(
-        &mut r2,
-        &mut g2,
-        &mut b2,
-        strip.row(0),
-        util::subgrid(&cm, Position(0, 0), Size(6, 1)),
-    );
-    assign_into(
-        &mut r2,
-        &mut g3,
-        &mut b2,
-        strip.row(1),
-        util::subgrid(&cm, Position(0, 1), Size(6, 1)),
-    );
-
-    fill_blanks(&mut r2, &r1, &r0);
-    fill_blanks(&mut b2, &b1, &b0);
-
-    //let r2: Vec<>
-    println!("G2: {:#?}", g2);
-    println!("R2: {:#?}", r2);
-    println!("B2: {:#?}", b2);
+        for (label, color) in ["R", "G", "B"].iter().zip(colors) {
+            for (i, row) in color.iter().enumerate() {
+                println!("{}{}: {:?}", label, i + 2, row);
+            }
+        }
+    }
 }

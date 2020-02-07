@@ -5,8 +5,8 @@ use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::{DataGrid, Grid, Offset, Position, Size};
-use libraw::{util, Color, RawFile};
+use libraw::util::{DataGrid, Offset, Position, Size};
+use libraw::{Color, RawFile};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
 use std::cmp::min;
@@ -276,8 +276,8 @@ fn render_raw_preview(img: &libraw::RawFile) -> image::RgbImage {
         .unwrap();
 
     let mapping: Vec<Color> = mapping.iter().flatten().copied().collect_vec();
-    let mapping = util::wrap(&mapping, Size(6, 6));
-    let img_grid = util::wrap(&img_data, Size(width, height));
+    let mapping = DataGrid::wrap(&mapping, Size(6, 6));
+    let img_grid = DataGrid::wrap(&img_data, Size(width, height));
     let _demosaic = |x: u32, y: u32| -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
@@ -347,7 +347,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
     // Change 14 bit to 16 bit.
     //let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
 
-    let mapping = util::wrap(&img.xtrans_mapping, Size(6, 6));
+    let mapping = DataGrid::wrap(&img.xtrans_mapping, Size(6, 6));
 
     // Should fix this lol
     let black_sub = |val: u16| -> u16 { val.saturating_sub(1022) };
@@ -363,7 +363,7 @@ fn render_raw_preview_native(img: &ParsedRafFile) -> image::RgbImage {
         .max()
         .unwrap();
 
-    let img_grid = util::wrap(&img_data, Size(img.width as usize, img.height as usize));
+    let img_grid = DataGrid::wrap(&img_data, Size(img.width as usize, img.height as usize));
 
     let _demosaic = |x: u16, y: u16| -> Pixel<u16> {
         let x = x as usize;
