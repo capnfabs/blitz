@@ -52,8 +52,10 @@ impl std::ops::Add<Offset> for Position {
     }
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct DataGrid<'a, T: Copy> {
+    #[derivative(Debug = "ignore")]
     data: &'a [T],
     data_size: Size,
     size: Size,

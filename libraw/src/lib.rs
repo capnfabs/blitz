@@ -15,6 +15,9 @@ mod tests {
 extern crate quick_error;
 
 #[macro_use]
+extern crate derivative;
+
+#[macro_use]
 extern crate data_encoding_macro;
 
 pub use libraw_sys::libraw_colordata_t;
