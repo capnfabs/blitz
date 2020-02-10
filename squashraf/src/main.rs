@@ -179,7 +179,7 @@ impl Grad {
         while (b << bits as i32) < a {
             bits += 1;
         }
-        bits
+        bits - 1
     }
 
     fn update_from_value(&mut self, value: i32) {
@@ -221,9 +221,6 @@ fn process_line(
         );
     }
 
-    println!("Carry Results!!");
-    dump_colors(carry_results);
-    println!("End Carry Results!!");
     fill_blanks_in_line(carry_results, &mut colors);
 
     make_samples_for_line(&mut colors, gradients, carry_results);
@@ -381,13 +378,16 @@ fn make_sample(
 
     if idx % 2 == 0 {
         println!(
-            "{}{}[{}]: weighted: {}, actual: {}, grad_idx: {}, grad_before: {:?}, grad_after: {:?}",
+            "{}{}[{}]: weighted: {}, actual: {}, grad_idx: {}, upper: {}, lower {}, code {}, grad_before: {:?}, grad_after: {:?}",
             c4(color),
             row_idx,
             idx,
             weighted_average,
             actual_value,
             which_grad,
+            upper,
+            lower,
+            code,
             old_grad,
             grad
         );
@@ -415,12 +415,18 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> (u16
     let lower = delta & split_mask;
     if upper > 40 {
         if unsafe { DUMP } {
-            //println!("dec bits encode direct");
+            println!("dec bits encode direct");
         }
         (41, actual_value)
     } else {
         if unsafe { DUMP } {
-            //println!("dec bits {}, upper {}, lower {}", dec_bits, upper, lower);
+            println!(
+                "dec bits {}, upper {}, lower {}",
+                dec_bits,
+                upper,
+                // Adjust to make it look right compared to the other thing
+                lower,
+            );
         }
         (upper, lower)
     }
