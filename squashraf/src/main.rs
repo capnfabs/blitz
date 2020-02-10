@@ -128,11 +128,13 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
 
     // TODO: calculate the num_lines and use the legit value.
     // each 'line' is a block of 6x768
-    let num_lines = 3;
+    let num_lines = 2;
     for line in 0..num_lines {
         let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
         let results = process_line(&line, &color_map, &mut gradients, &prev_lines);
+        dump_colors(&results);
         prev_lines = collect_carry_lines(results);
+        //dump_colors(&prev_lines);
     }
 }
 
@@ -219,11 +221,12 @@ fn process_line(
         );
     }
 
+    println!("Carry Results!!");
+    dump_colors(carry_results);
+    println!("End Carry Results!!");
     fill_blanks_in_line(carry_results, &mut colors);
 
     make_samples_for_line(&mut colors, gradients, carry_results);
-
-    print_color_info(&colors);
 
     colors
 }
@@ -240,7 +243,7 @@ fn q_value(v: i32) -> i32 {
         -4
     } else if v <= -0x43 {
         -3
-    } else if v <= 0x12 {
+    } else if v <= -0x12 {
         -2
     } else if v < 0 {
         -1
@@ -262,8 +265,6 @@ fn make_samples_for_line(
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
 ) {
-    let (even_gradients, _) = gradients;
-
     // TODO: this is currently only for G2,R2
     // The ordering in which these are output is kinda gross
     // Do the first 4 green values from G2 (even)
@@ -271,66 +272,176 @@ fn make_samples_for_line(
     // Doing R2 odd and G2 odd simultaneously isi important because they both
     // access the same set of gradients
     // Interleaving all three is important because that's the output format 😅
-    let row_idx = 0;
-    let green_even = repeat(Color::Green).zip((0..512).step_by(2));
-    let green_odd = repeat(Color::Green).zip((0..512).skip(1).step_by(2));
-    let red_odd = repeat(Color::Red).zip((0..512).skip(1).step_by(2));
-    let zipped =
-        zip_with_offset(green_even, 0, green_odd.zip_eq(red_odd), 4).map(|(a, b)| (a, flatten(b)));
-    for (green_even, (green_odd, red_odd)) in zipped {
-        // TODO: implement processing
-        if let Some((color, idx)) = green_even {
-            let ec = load_even_coefficients(
-                // TODO: adapt these for the row_idx
-                &carry_results[color][1],
-                &carry_results[color][0],
-                idx,
-            );
-            let which_grad_signed = 9 * q_value(ec.north as i32 - ec.very_north as i32)
-                + q_value(ec.northwest as i32 - ec.north as i32);
-            let which_grad = which_grad_signed.abs() as usize;
-            let weighted_average = compute_weighted_average(ec);
-            let actual_value = colors[color][row_idx][idx];
-            let delta = actual_value as i32 - weighted_average as i32;
+    let PROCESS = [
+        ((Color::Red, 0), (Color::Green, 0), 0),
+        ((Color::Green, 1), (Color::Blue, 0), 1),
+        ((Color::Red, 1), (Color::Green, 2), 2),
+        ((Color::Green, 3), (Color::Blue, 1), 0),
+        ((Color::Red, 2), (Color::Green, 4), 1),
+        ((Color::Green, 5), (Color::Blue, 2), 2),
+    ];
 
-            let delta_was_negative = delta < 0;
-            let delta = delta.abs() as u16;
+    for (color_a, color_b, grad_set_idx) in &PROCESS {
+        let ca_even = repeat(color_a).zip((0..512).step_by(2));
+        let ca_odd = repeat(color_a).zip((0..512).skip(1).step_by(2));
+        let cb_even = repeat(color_b).zip((0..512).step_by(2));
+        let cb_odd = repeat(color_b).zip((0..512).skip(1).step_by(2));
+        let zipped = zip_with_offset(ca_even.zip_eq(cb_even), 0, ca_odd.zip_eq(cb_odd), 4)
+            .map(|(a, b)| (flatten(a), flatten(b)));
 
-            // TODO: even_gradients[0] is based on row, generalize
-            let grad = &mut even_gradients[0][which_grad];
-            let dec_bits = grad.bit_diff() as u16;
-
-            let split_mask = (1 << dec_bits) - 1;
-            // 'sample' in libraw terminology
-            let upper = (delta & (!split_mask)) >> dec_bits;
-            let lower = delta & split_mask;
-
-            // sometimes the gradient will give us the wrong sign; in which case
-            // we can flip the sign again by inverting all the bits. In both
-            // cases, use the final bit as a 'sign' bit.
-            let code = if (which_grad_signed < 0) == delta_was_negative {
-                lower << 1 | 0b0
-            } else {
-                (!lower << 1) | 0b1
-            };
-
-            let old_grad = *grad;
-
-            // finally: update gradient
-            grad.update_from_value(lower as i32);
-
-            println!(
-                "G2[{}]: sample: {}, code: {}, grad_idx: {}, grad_before: {:?}, grad_after: {:?}",
-                idx, upper, code, which_grad, old_grad, grad
-            );
-        }
-        if let Some((_color, _idx)) = green_odd {
-            // process green_odd
-        }
-        if let Some((_color, _idx)) = red_odd {
-            // process red_odd
+        // TODO need to skip generated vals somehow.
+        for ((ca_even, cb_even), (ca_odd, cb_odd)) in zipped {
+            for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
+                if let Some(((color, row), idx)) = thing {
+                    if !skip(*color, *row, idx) {
+                        make_sample(
+                            &colors,
+                            gradients,
+                            &carry_results,
+                            *row,
+                            *color,
+                            idx,
+                            *grad_set_idx,
+                        );
+                    }
+                }
+            }
         }
     }
+}
+
+fn skip(color: Color, row: usize, idx: usize) -> bool {
+    if idx % 2 == 1 {
+        // never skip odd
+        false
+    } else {
+        match color {
+            Color::Red => {
+                (row == 0) || (row == 1 && (idx & 3 == 0)) || (row == 2 && (idx & 3 == 2))
+            }
+            Color::Green => (row == 2) || (row == 5),
+            Color::Blue => {
+                (row == 0) || (row == 1 && (idx & 3 == 2)) || (row == 2 && (idx & 3 == 0))
+            }
+        }
+    }
+}
+
+fn make_sample(
+    colors: &Colored<Vec<Vec<u16>>>,
+    gradients: &mut ([[Grad; 41]; 3], [[Grad; 41]; 3]),
+    carry_results: &Colored<Vec<Vec<u16>>>,
+    row_idx: usize,
+    color: Color,
+    idx: usize,
+    grad_set: usize,
+) {
+    let is_even = idx % 2 == 0;
+    let carry_results = &carry_results[color];
+    let cdata = &colors[color];
+    let (even_gradients, odd_gradients) = gradients;
+    let (rprevprev, rprev) = match row_idx {
+        0 => (carry_results[0].as_slice(), carry_results[1].as_slice()),
+        1 => (carry_results[1].as_slice(), cdata[0].as_slice()),
+        row => (cdata[row - 2].as_slice(), cdata[row - 1].as_slice()),
+    };
+    let (grad_set, (weighted_average, which_grad)) = if is_even {
+        (
+            &mut even_gradients[grad_set],
+            grad_and_weighted_avg_even(idx, rprevprev, rprev),
+        )
+    } else {
+        (
+            &mut odd_gradients[grad_set],
+            grad_and_weighted_avg_odd(idx, rprevprev, rprev),
+        )
+    };
+    let grad = &mut grad_set[which_grad.abs() as usize];
+    let actual_value = cdata[row_idx][idx];
+    let grad_is_negative = which_grad < 0;
+    unsafe { DUMP = is_even };
+    let (upper, lower) = compute_sample(weighted_average, actual_value, grad);
+    let delta_is_negative = actual_value < weighted_average;
+
+    let old_grad = *grad;
+    // Finally: update gradient. This updates based on the absolute value of the delta.
+    grad.update_from_value((actual_value as i32 - weighted_average as i32).abs());
+
+    // FINALLY ENCODE SOME SHIT
+    // sometimes the gradient will give us the wrong sign; in which case
+    // we can flip the sign again by inverting all the bits. In both
+    // cases, use the final bit as a 'sign' bit.
+    // The 'code' distinction here isn't helpful, at all.
+    // Should treat these as separate values.
+    let code = if grad_is_negative == delta_is_negative {
+        lower << 1 | 0b0
+    } else {
+        (!lower << 1) | 0b1
+    };
+
+    if idx % 2 == 0 {
+        println!(
+            "{}{}[{}]: weighted: {}, actual: {}, grad_idx: {}, grad_before: {:?}, grad_after: {:?}",
+            c4(color),
+            row_idx,
+            idx,
+            weighted_average,
+            actual_value,
+            which_grad,
+            old_grad,
+            grad
+        );
+    }
+    // upper and code are the two things we need to preserve.
+}
+
+fn c4(color: Color) -> &'static str {
+    match color {
+        Color::Red => "R",
+        Color::Green => "G",
+        Color::Blue => "B",
+    }
+}
+
+static mut DUMP: bool = false;
+
+fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> (u16, u16) {
+    let delta = actual_value as i32 - weighted_average as i32;
+    let delta = delta.abs() as u16;
+    let dec_bits = grad.bit_diff() as u16;
+    let split_mask = (1 << dec_bits) - 1;
+    // 'sample' in libraw terminology
+    let upper = (delta & (!split_mask)) >> dec_bits;
+    let lower = delta & split_mask;
+    if upper > 40 {
+        if unsafe { DUMP } {
+            //println!("dec bits encode direct");
+        }
+        (41, actual_value)
+    } else {
+        if unsafe { DUMP } {
+            //println!("dec bits {}, upper {}, lower {}", dec_bits, upper, lower);
+        }
+        (upper, lower)
+    }
+}
+
+fn grad_and_weighted_avg_even(idx: usize, rprevprev: &[u16], rprev: &[u16]) -> (u16, i32) {
+    let ec = load_even_coefficients(rprev, rprevprev, idx);
+    let weighted_average = compute_weighted_average(ec);
+    let which_grad = 9 * q_value(ec.north as i32 - ec.very_north as i32)
+        + q_value(ec.northwest as i32 - ec.north as i32);
+    //println!("even which grad {}, ec = {:?}", which_grad, ec);
+    (weighted_average, which_grad)
+}
+
+fn grad_and_weighted_avg_odd(idx: usize, rprevprev: &[u16], rprev: &[u16]) -> (u16, i32) {
+    (0, 0)
+    /*let oc = load_odd_coefficients(rprev, rprevprev, idx);
+    let weighted_average = compute_weighted_average(oc);
+    let which_grad = 9 * q_value(ec.north as i32 - ec.very_north as i32)
+        + q_value(ec.northwest as i32 - ec.north as i32);
+    (weighted_average, which_grad)*/
 }
 
 fn load_even_coefficients(rprev: &[u16], rprevprev: &[u16], idx: usize) -> EvenCoefficients {
@@ -353,7 +464,8 @@ fn load_even_coefficients(rprev: &[u16], rprevprev: &[u16], idx: usize) -> EvenC
     }
 }
 
-fn print_color_info(colors: &Colored<Vec<Vec<u16>>>) {
+#[allow(unused)]
+fn dump_colors(colors: &Colored<Vec<Vec<u16>>>) {
     for (label, (_, color)) in ["R", "G", "B"].iter().zip(colors.iter()) {
         for (i, row) in color.iter().enumerate() {
             println!("{}{}: {:?}", label, i + 2, row);

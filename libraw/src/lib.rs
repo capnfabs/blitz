@@ -116,14 +116,12 @@ fn with_err_conversion<F>(mut f: F) -> Result<()>
 where
     F: FnMut() -> c_int,
 {
-    unsafe {
-        match f() {
-            0 => Ok(()),
-            code => {
-                // safe because these are all constants in the libraw library.
-                let err = CStr::from_ptr(libraw_strerror(code));
-                Err(RawError::GenericError(err.to_str().unwrap()))
-            }
+    match f() {
+        0 => Ok(()),
+        code => {
+            // safe because these are all constants in the libraw library.
+            let err = unsafe { CStr::from_ptr(libraw_strerror(code)) };
+            Err(RawError::GenericError(err.to_str().unwrap()))
         }
     }
 }
