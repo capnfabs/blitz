@@ -170,18 +170,18 @@ const GRADIENT_MIN_VALUE: i32 = 64;
 impl Grad {
     fn bit_diff(self) -> usize {
         let Grad(a, b) = self;
+        let a = a as usize;
+        let b = b as usize;
 
-        if b >= a {
-            return 0;
+        if b < a {
+            let mut dec_bits = 1;
+            while dec_bits <= 12 && (b << dec_bits) < a {
+                dec_bits += 1;
+            }
+            dec_bits
+        } else {
+            0
         }
-
-        // TODO: there's probably a way to do this without a loop, but I don't
-        // know what it is.
-        let mut bits: usize = 1;
-        while (b << bits as i32) < a {
-            bits += 1;
-        }
-        bits - 1
     }
 
     fn update_from_value(&mut self, value: i32) {
@@ -334,6 +334,15 @@ fn skip(color: Color, row: usize, idx: usize) -> bool {
     }
 }
 
+enum Sample {
+    Absolute(u16),
+    Relative {
+        upper: u16,
+        lower: u16,
+        lower_bits: usize,
+    },
+}
+
 fn make_sample(
     colors: &Colored<Vec<Vec<u16>>>,
     gradients: &mut ([[Grad; 41]; 3], [[Grad; 41]; 3]),
@@ -367,10 +376,11 @@ fn make_sample(
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
     unsafe { DUMP = is_even };
-    let (upper, lower) = compute_sample(weighted_average, actual_value, grad);
+    let mut sample = compute_sample(weighted_average, actual_value, grad);
     let delta_is_negative = actual_value < weighted_average;
 
     let old_grad = *grad;
+    // TODO: refactor this + delta_is_negative into one thing.
     // Finally: update gradient. This updates based on the absolute value of the delta.
     grad.update_from_value((actual_value as i32 - weighted_average as i32).abs());
 
@@ -380,10 +390,37 @@ fn make_sample(
     // cases, use the final bit as a 'sign' bit.
     // The 'code' distinction here isn't helpful, at all.
     // Should treat these as separate values.
-    let code = if (delta_is_negative != grad_is_negative || upper == 41) && lower != 0 {
-        (lower - 1) << 1 | 0b1
-    } else {
-        lower << 1
+
+    let sample = match sample {
+        Sample::Relative {
+            upper,
+            lower: 0,
+            lower_bits,
+        } if upper > 0 && delta_is_negative != grad_is_negative => {
+            // This amazing hack depends upon the subtraction of 1, below.
+            Sample::Relative {
+                upper: upper - 1,
+                lower: 1 << lower_bits as u16,
+                lower_bits,
+            }
+        }
+        _ => sample,
+    };
+
+    let (s, c) = match sample {
+        Sample::Absolute(val) => (41, (val - 1) << 1 | 0b1),
+        Sample::Relative {
+            upper,
+            lower,
+            lower_bits,
+        } => {
+            let c = if delta_is_negative != grad_is_negative && lower > 0 {
+                (lower - 1) << 1 | 0b1
+            } else {
+                lower << 1
+            };
+            (upper, c)
+        }
     };
 
     if idx % 2 == 0 {
@@ -394,14 +431,14 @@ fn make_sample(
             idx,
             weighted_average,
             actual_value,
-            upper,
-            code,
+            s,
+            c,
             old_grad,
             grad
         );
     }
 
-    (upper, code)
+    (s, c)
 }
 
 fn c4(color: Color) -> &'static str {
@@ -414,10 +451,11 @@ fn c4(color: Color) -> &'static str {
 
 static mut DUMP: bool = false;
 
-fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> (u16, u16) {
+fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Sample {
     let delta = actual_value as i32 - weighted_average as i32;
     let delta = delta.abs() as u16;
-    let dec_bits = grad.bit_diff() as u16;
+    let orig_dec_bits = grad.bit_diff() as u16;
+    let dec_bits = orig_dec_bits.saturating_sub(1);
     let split_mask = (1 << dec_bits) - 1;
     // 'sample' in libraw terminology
     let upper = (delta & (!split_mask)) >> dec_bits;
@@ -426,17 +464,16 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> (u16
         if unsafe { DUMP } {
             println!("dec bits encode direct");
         }
-        (41, actual_value)
+        Sample::Absolute(actual_value)
     } else {
         if unsafe { DUMP } {
-            let dec_bits = if dec_bits != 0 {
-                dec_bits + 1
-            } else {
-                dec_bits
-            };
-            println!("dec bits {}", dec_bits,);
+            println!("dec bits {}", orig_dec_bits,);
         }
-        (upper, lower)
+        Sample::Relative {
+            upper,
+            lower,
+            lower_bits: dec_bits as usize,
+        }
     }
 }
 
