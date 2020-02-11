@@ -11,6 +11,7 @@ mod zip_with_offset;
 use crate::zip_with_offset::zip_with_offset;
 
 use crate::colored::Colored;
+use std::io::Cursor;
 use std::iter::repeat;
 
 fn main() {
@@ -174,7 +175,8 @@ impl Grad {
             return 0;
         }
 
-        // TODO: pretty sure we can use leading_zeros for this and subtract results.
+        // TODO: there's probably a way to do this without a loop, but I don't
+        // know what it is.
         let mut bits: usize = 1;
         while (b << bits as i32) < a {
             bits += 1;
@@ -278,6 +280,9 @@ fn make_samples_for_line(
         ((Color::Green, 5), (Color::Blue, 2), 2),
     ];
 
+    let data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+    let mut output = bitbit::BitWriter::new(data);
+
     for (color_a, color_b, grad_set_idx) in &PROCESS {
         let ca_even = repeat(color_a).zip((0..512).step_by(2));
         let ca_odd = repeat(color_a).zip((0..512).skip(1).step_by(2));
@@ -291,7 +296,7 @@ fn make_samples_for_line(
             for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
                 if let Some(((color, row), idx)) = thing {
                     if !skip(*color, *row, idx) {
-                        make_sample(
+                        let (sample, code) = make_sample(
                             &colors,
                             gradients,
                             &carry_results,
@@ -300,6 +305,11 @@ fn make_samples_for_line(
                             idx,
                             *grad_set_idx,
                         );
+                        for _ in 0..sample {
+                            output.write_bit(true).unwrap();
+                        }
+                        output.write_bit(false).unwrap();
+                        //output.write_bits(code)
                     }
                 }
             }
@@ -332,7 +342,7 @@ fn make_sample(
     color: Color,
     idx: usize,
     grad_set: usize,
-) {
+) -> (u16, u16) {
     let is_even = idx % 2 == 0;
     let carry_results = &carry_results[color];
     let cdata = &colors[color];
@@ -370,29 +380,28 @@ fn make_sample(
     // cases, use the final bit as a 'sign' bit.
     // The 'code' distinction here isn't helpful, at all.
     // Should treat these as separate values.
-    let code = if grad_is_negative == delta_is_negative {
-        lower << 1 | 0b0
+    let code = if (delta_is_negative != grad_is_negative || upper == 41) && lower != 0 {
+        (lower - 1) << 1 | 0b1
     } else {
-        (!lower << 1) | 0b1
+        lower << 1
     };
 
     if idx % 2 == 0 {
         println!(
-            "{}{}[{}]: weighted: {}, actual: {}, grad_idx: {}, upper: {}, lower {}, code {}, grad_before: {:?}, grad_after: {:?}",
+            "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, grad_before: {:?}, grad_after: {:?}",
             c4(color),
             row_idx,
             idx,
             weighted_average,
             actual_value,
-            which_grad,
             upper,
-            lower,
             code,
             old_grad,
             grad
         );
     }
-    // upper and code are the two things we need to preserve.
+
+    (upper, code)
 }
 
 fn c4(color: Color) -> &'static str {
@@ -420,13 +429,12 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> (u16
         (41, actual_value)
     } else {
         if unsafe { DUMP } {
-            println!(
-                "dec bits {}, upper {}, lower {}",
-                dec_bits,
-                upper,
-                // Adjust to make it look right compared to the other thing
-                lower,
-            );
+            let dec_bits = if dec_bits != 0 {
+                dec_bits + 1
+            } else {
+                dec_bits
+            };
+            println!("dec bits {}", dec_bits,);
         }
         (upper, lower)
     }
