@@ -150,6 +150,7 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
         prev_lines = collect_carry_lines(results);
     }
     output.pad_to_byte().unwrap();
+    // TODO: pad output to hit a 32-bit boundary (I think it's 32 bits, at least).
     let mut file = File::create("/Users/fabian/Downloads/test-blk.bin").unwrap();
     file.write_all(data.get_ref()).unwrap();
     //println!("Line output: {}", hex::encode(data.get_ref()));
