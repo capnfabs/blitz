@@ -6,12 +6,14 @@ use libraw::util::{DataGrid, Position, Size};
 use libraw::{Color, RawFile};
 
 mod colored;
+mod evenodd;
 mod zip_with_offset;
 
 use crate::zip_with_offset::zip_with_offset;
 
 use crate::colored::Colored;
-use std::io::Cursor;
+use std::fs::File;
+use std::io::{Cursor, Write};
 use std::iter::repeat;
 
 fn main() {
@@ -56,7 +58,7 @@ fn assign_into(colors: &mut Colored<&mut Vec<u16>>, row: &[u16], row_map: &DataG
 // if both north_west and north_east are equidistant from north, than use those for the weighted
 // average regardless of how big they are. This feels like an implementation detail in the original
 // fuji code. My guess is we can get better compression ratios by doing something different, but I don't know!
-fn compute_weighted_average(ec: EvenCoefficients) -> u16 {
+fn compute_weighted_average_even(ec: EvenCoefficients) -> u16 {
     let distance = |v: u16| (v as i32 - ec.north as i32).abs();
     let others = [ec.northwest, ec.northeast, ec.very_north]
         .iter()
@@ -72,10 +74,21 @@ fn compute_weighted_average(ec: EvenCoefficients) -> u16 {
     (others[0] + others[1] + 2 * ec.north) / 4
 }
 
+fn compute_weighted_average_odd(oc: OddCoefficients) -> u16 {
+    if (oc.north > oc.north_west && oc.north > oc.north_east)
+        || (oc.north < oc.north_west && oc.north < oc.north_east)
+    {
+        // Note on typing here: This will all fit in a u16, because we've got 4x max u14s.
+        (oc.east + oc.west + 2 * oc.north) / 4
+    } else {
+        (oc.west + oc.east) / 2
+    }
+}
+
 fn fill_blanks_in_row(row: &mut [u16], rprev: &[u16], rprevprev: &[u16]) {
     for (idx, x) in row.iter_mut().enumerate() {
         if *x == UNSET {
-            *x = compute_weighted_average(load_even_coefficients(rprev, rprevprev, idx))
+            *x = compute_weighted_average_even(load_even_coefficients(rprev, rprevprev, idx))
         }
     }
 }
@@ -127,16 +140,20 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
         [[Grad(GRADIENT_MAX_VALUE, 1); 41]; 3],
     );
 
-    // TODO: calculate the num_lines and use the legit value.
-    // each 'line' is a block of 6x768
-    let num_lines = 2;
+    let num_lines = stripe.size().1 / 6;
+    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+    let mut output = bitbit::BitWriter::new(&mut data);
     for line in 0..num_lines {
         let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
-        let results = process_line(&line, &color_map, &mut gradients, &prev_lines);
-        dump_colors(&results);
+        let results = process_line(&line, &color_map, &mut gradients, &prev_lines, &mut output);
+        //dump_colors(&results);
         prev_lines = collect_carry_lines(results);
         //dump_colors(&prev_lines);
     }
+    output.pad_to_byte().unwrap();
+    let mut file = File::create("/Users/fabian/Downloads/test-blk.bin").unwrap();
+    file.write_all(data.get_ref()).unwrap();
+    //println!("Line output: {}", hex::encode(data.get_ref()));
 }
 
 fn collect_carry_lines(results: Colored<Vec<Vec<u16>>>) -> Colored<Vec<Vec<u16>>> {
@@ -204,11 +221,14 @@ struct EvenCoefficients {
     very_north: u16,
 }
 
+type SampleTarget<'a> = bitbit::BitWriter<&'a mut Cursor<Vec<u8>>>;
+
 fn process_line(
     line: &DataGrid<u16>,
     color_map: &DataGrid<Color>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
+    output: &mut SampleTarget,
 ) -> Colored<Vec<Vec<u16>>> {
     let mut colors = Colored::new(
         vec![vec![UNSET; 512]; 3],
@@ -227,7 +247,7 @@ fn process_line(
 
     fill_blanks_in_line(carry_results, &mut colors);
 
-    make_samples_for_line(&mut colors, gradients, carry_results);
+    make_samples_for_line(&mut colors, gradients, carry_results, output);
 
     colors
 }
@@ -265,6 +285,7 @@ fn make_samples_for_line(
     colors: &Colored<Vec<Vec<u16>>>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
+    output: &mut SampleTarget,
 ) {
     // TODO: this is currently only for G2,R2
     // The ordering in which these are output is kinda gross
@@ -282,9 +303,6 @@ fn make_samples_for_line(
         ((Color::Green, 5), (Color::Blue, 2), 2),
     ];
 
-    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-    let mut output = bitbit::BitWriter::new(data.get_mut());
-
     for (color_a, color_b, grad_set_idx) in &PROCESS {
         let ca_even = repeat(color_a).zip((0..512).step_by(2));
         let ca_odd = repeat(color_a).zip((0..512).skip(1).step_by(2));
@@ -293,7 +311,6 @@ fn make_samples_for_line(
         let zipped = zip_with_offset(ca_even.zip_eq(cb_even), 0, ca_odd.zip_eq(cb_odd), 4)
             .map(|(a, b)| (flatten(a), flatten(b)));
 
-        // TODO need to skip generated vals somehow.
         for ((ca_even, cb_even), (ca_odd, cb_odd)) in zipped {
             for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
                 if let Some(((color, row), idx)) = thing {
@@ -319,7 +336,6 @@ fn make_samples_for_line(
             }
         }
     }
-    println!("Line output: {}", hex::encode(data.get_ref()));
 }
 
 fn skip(color: Color, row: usize, idx: usize) -> bool {
@@ -374,7 +390,7 @@ fn make_sample(
     } else {
         (
             &mut odd_gradients[grad_set],
-            grad_and_weighted_avg_odd(idx, rprevprev, rprev),
+            grad_and_weighted_avg_odd(idx, rprevprev, rprev, &cdata[row_idx]),
         )
     };
     let grad = &mut grad_set[which_grad.abs() as usize];
@@ -428,7 +444,7 @@ fn make_sample(
         }
     };
 
-    if idx % 2 == 0 {
+    if false {
         println!(
             "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, cbits: {}, grad_before: {:?}, grad_after: {:?}",
             c4(color),
@@ -470,7 +486,7 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Samp
         if unsafe { DUMP } {
             //println!("dec bits encode direct");
         }
-        Sample::Absolute(actual_value)
+        Sample::Absolute(delta)
     } else {
         if unsafe { DUMP } {
             //println!("dec bits {}", orig_dec_bits,);
@@ -485,39 +501,83 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Samp
 
 fn grad_and_weighted_avg_even(idx: usize, rprevprev: &[u16], rprev: &[u16]) -> (u16, i32) {
     let ec = load_even_coefficients(rprev, rprevprev, idx);
-    let weighted_average = compute_weighted_average(ec);
+    let weighted_average = compute_weighted_average_even(ec);
     let which_grad = 9 * q_value(ec.north as i32 - ec.very_north as i32)
         + q_value(ec.northwest as i32 - ec.north as i32);
     //println!("even which grad {}, ec = {:?}", which_grad, ec);
     (weighted_average, which_grad)
 }
 
-fn grad_and_weighted_avg_odd(idx: usize, rprevprev: &[u16], rprev: &[u16]) -> (u16, i32) {
-    (0, 0)
-    /*let oc = load_odd_coefficients(rprev, rprevprev, idx);
-    let weighted_average = compute_weighted_average(oc);
-    let which_grad = 9 * q_value(ec.north as i32 - ec.very_north as i32)
-        + q_value(ec.northwest as i32 - ec.north as i32);
-    (weighted_average, which_grad)*/
+fn grad_and_weighted_avg_odd(
+    idx: usize,
+    rprevprev: &[u16],
+    rprev: &[u16],
+    rthis: &[u16],
+) -> (u16, i32) {
+    let oc = load_odd_coefficients(rprevprev, rprev, rthis, idx);
+
+    let weighted_average = compute_weighted_average_odd(oc);
+    let which_grad = 9 * q_value(oc.north as i32 - oc.north_west as i32)
+        + q_value(oc.north_west as i32 - oc.west as i32);
+    (weighted_average, which_grad)
 }
 
 fn load_even_coefficients(rprev: &[u16], rprevprev: &[u16], idx: usize) -> EvenCoefficients {
-    let last_idx = rprev.len() - 1;
     let leftmost_other = if idx == 0 {
         rprevprev[0]
     } else {
         rprev[idx - 1]
     };
-    let rightmost_other = if idx == last_idx {
-        rprevprev[rprevprev.len() - 1]
-    } else {
-        rprev[idx + 1]
-    };
+    // Ensure that the vector is even-lengthed
+    assert_eq!(rprev.len() % 2, 0);
+    // Ensure that we're targeting an even value
+    assert_eq!(idx % 2, 0);
     EvenCoefficients {
         north: rprev[idx],
         northwest: leftmost_other,
-        northeast: rightmost_other,
+        // Note that row width is always a multiple of 2, so for an even index
+        // there will always be at least one value to the right of it.
+        northeast: rprev[idx + 1],
         very_north: rprevprev[idx],
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct OddCoefficients {
+    west: u16,       // Ra
+    north: u16,      // Rb
+    north_west: u16, // Rc
+    north_east: u16, // Rd
+    east: u16,       // Rg
+}
+
+fn load_odd_coefficients(
+    rprevprev: &[u16],
+    rprev: &[u16],
+    rthis: &[u16],
+    idx: usize,
+) -> OddCoefficients {
+    // Ensure that the vector is even-lengthed
+    assert_eq!(rprev.len() % 2, 0);
+    assert_eq!(rprev.len(), rprevprev.len());
+    assert_eq!(rprev.len(), rthis.len());
+    // Ensure that we're targeting an odd value
+    assert_eq!(idx % 2, 1);
+
+    // the rightmost value is in a vaguely tricky situation. If it doesn't
+    // exist, use the value immediately above instead.
+    let last_idx = rprev.len() - 1;
+    let (rightmost_rprev, rightmost_rthis) = if idx == last_idx {
+        (rprevprev[rprevprev.len() - 1], rprev[rprev.len() - 1])
+    } else {
+        (rprev[idx + 1], rthis[idx + 1])
+    };
+    OddCoefficients {
+        west: rthis[idx - 1],
+        north: rprev[idx],
+        north_west: rprev[idx - 1],
+        north_east: rightmost_rprev,
+        east: rightmost_rthis,
     }
 }
 
