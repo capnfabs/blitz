@@ -144,11 +144,10 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
     let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
     let mut output = bitbit::BitWriter::new(&mut data);
     for line in 0..num_lines {
+        unsafe { DUMP = line == num_lines - 1 };
         let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
         let results = process_line(&line, &color_map, &mut gradients, &prev_lines, &mut output);
-        //dump_colors(&results);
         prev_lines = collect_carry_lines(results);
-        //dump_colors(&prev_lines);
     }
     output.pad_to_byte().unwrap();
     let mut file = File::create("/Users/fabian/Downloads/test-blk.bin").unwrap();
@@ -396,7 +395,6 @@ fn make_sample(
     let grad = &mut grad_set[which_grad.abs() as usize];
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
-    unsafe { DUMP = is_even };
     let sample = compute_sample(weighted_average, actual_value, grad);
     let delta_is_negative = actual_value < weighted_average;
 
@@ -429,6 +427,7 @@ fn make_sample(
     };
 
     let (s, c, lower_bits) = match sample {
+        Sample::Absolute(val) if delta_is_negative != grad_is_negative => (41, (val - 1) << 1, 14),
         Sample::Absolute(val) => (41, (val - 1) << 1 | 0b1, 14),
         Sample::Relative {
             upper,
@@ -444,9 +443,9 @@ fn make_sample(
         }
     };
 
-    if false {
+    if unsafe { DUMP } {
         println!(
-            "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, cbits: {}, grad_before: {:?}, grad_after: {:?}",
+            "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, cbits: {}, grad_neg: {}, grad_before: {:?}, grad_after: {:?}",
             c4(color),
             row_idx,
             idx,
@@ -455,6 +454,7 @@ fn make_sample(
             s,
             c,
             lower_bits,
+            if grad_is_negative {1} else {0},
             old_grad,
             grad
         );
@@ -483,14 +483,8 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Samp
     let upper = (delta & (!split_mask)) >> mask_dec_bits;
     let lower = delta & split_mask;
     if upper > 40 {
-        if unsafe { DUMP } {
-            //println!("dec bits encode direct");
-        }
         Sample::Absolute(delta)
     } else {
-        if unsafe { DUMP } {
-            //println!("dec bits {}", orig_dec_bits,);
-        }
         Sample::Relative {
             upper,
             lower,
