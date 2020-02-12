@@ -178,8 +178,10 @@ impl Grad {
             while dec_bits <= 12 && (b << dec_bits) < a {
                 dec_bits += 1;
             }
+            //println!("b: {}, a: {}, dec_bits: {}", b, a, dec_bits);
             dec_bits
         } else {
+            //println!("b: {}, a: {}, dec_bits: 0", b, a);
             0
         }
     }
@@ -280,8 +282,8 @@ fn make_samples_for_line(
         ((Color::Green, 5), (Color::Blue, 2), 2),
     ];
 
-    let data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-    let mut output = bitbit::BitWriter::new(data);
+    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+    let mut output = bitbit::BitWriter::new(data.get_mut());
 
     for (color_a, color_b, grad_set_idx) in &PROCESS {
         let ca_even = repeat(color_a).zip((0..512).step_by(2));
@@ -296,7 +298,7 @@ fn make_samples_for_line(
             for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
                 if let Some(((color, row), idx)) = thing {
                     if !skip(*color, *row, idx) {
-                        let (sample, code) = make_sample(
+                        let (sample, code, code_bits) = make_sample(
                             &colors,
                             gradients,
                             &carry_results,
@@ -306,15 +308,18 @@ fn make_samples_for_line(
                             *grad_set_idx,
                         );
                         for _ in 0..sample {
-                            output.write_bit(true).unwrap();
+                            output.write_bit(false).unwrap();
                         }
-                        output.write_bit(false).unwrap();
-                        //output.write_bits(code)
+                        output.write_bit(true).unwrap();
+                        if code_bits != 0 {
+                            output.write_bits(code as u32, code_bits).unwrap();
+                        }
                     }
                 }
             }
         }
     }
+    println!("Line output: {}", hex::encode(data.get_ref()));
 }
 
 fn skip(color: Color, row: usize, idx: usize) -> bool {
@@ -351,7 +356,7 @@ fn make_sample(
     color: Color,
     idx: usize,
     grad_set: usize,
-) -> (u16, u16) {
+) -> (u16, u16, usize) {
     let is_even = idx % 2 == 0;
     let carry_results = &carry_results[color];
     let cdata = &colors[color];
@@ -376,7 +381,7 @@ fn make_sample(
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
     unsafe { DUMP = is_even };
-    let mut sample = compute_sample(weighted_average, actual_value, grad);
+    let sample = compute_sample(weighted_average, actual_value, grad);
     let delta_is_negative = actual_value < weighted_average;
 
     let old_grad = *grad;
@@ -400,15 +405,15 @@ fn make_sample(
             // This amazing hack depends upon the subtraction of 1, below.
             Sample::Relative {
                 upper: upper - 1,
-                lower: 1 << lower_bits as u16,
+                lower: 1 << (lower_bits - 1) as u16,
                 lower_bits,
             }
         }
         _ => sample,
     };
 
-    let (s, c) = match sample {
-        Sample::Absolute(val) => (41, (val - 1) << 1 | 0b1),
+    let (s, c, lower_bits) = match sample {
+        Sample::Absolute(val) => (41, (val - 1) << 1 | 0b1, 14),
         Sample::Relative {
             upper,
             lower,
@@ -419,13 +424,13 @@ fn make_sample(
             } else {
                 lower << 1
             };
-            (upper, c)
+            (upper, c, lower_bits)
         }
     };
 
     if idx % 2 == 0 {
         println!(
-            "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, grad_before: {:?}, grad_after: {:?}",
+            "{}{}[{}]: ref: {}, actual: {}, sample: {}, code: {}, cbits: {}, grad_before: {:?}, grad_after: {:?}",
             c4(color),
             row_idx,
             idx,
@@ -433,12 +438,13 @@ fn make_sample(
             actual_value,
             s,
             c,
+            lower_bits,
             old_grad,
             grad
         );
     }
 
-    (s, c)
+    (s, c, lower_bits)
 }
 
 fn c4(color: Color) -> &'static str {
@@ -454,20 +460,20 @@ static mut DUMP: bool = false;
 fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Sample {
     let delta = actual_value as i32 - weighted_average as i32;
     let delta = delta.abs() as u16;
-    let orig_dec_bits = grad.bit_diff() as u16;
-    let dec_bits = orig_dec_bits.saturating_sub(1);
-    let split_mask = (1 << dec_bits) - 1;
+    let dec_bits = grad.bit_diff() as u16;
+    let mask_dec_bits = dec_bits.saturating_sub(1);
+    let split_mask = (1 << mask_dec_bits) - 1;
     // 'sample' in libraw terminology
-    let upper = (delta & (!split_mask)) >> dec_bits;
+    let upper = (delta & (!split_mask)) >> mask_dec_bits;
     let lower = delta & split_mask;
     if upper > 40 {
         if unsafe { DUMP } {
-            println!("dec bits encode direct");
+            //println!("dec bits encode direct");
         }
         Sample::Absolute(actual_value)
     } else {
         if unsafe { DUMP } {
-            println!("dec bits {}", orig_dec_bits,);
+            //println!("dec bits {}", orig_dec_bits,);
         }
         Sample::Relative {
             upper,
@@ -539,5 +545,12 @@ fn fill_blanks_in_line(
             };
             fill_blanks_in_row(future[0].as_mut_slice(), rprev, rprevprev)
         }
+    }
+}
+
+mod test {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
     }
 }
