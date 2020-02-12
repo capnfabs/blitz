@@ -87,6 +87,14 @@ impl Color {
             Color::Blue => [0, 0, 1],
         }
     }
+
+    pub fn letter(&self) -> &'static str {
+        match self {
+            Color::Red => "R",
+            Color::Green => "G",
+            Color::Blue => "B",
+        }
+    }
 }
 
 #[allow(dead_code)] // We'll use this eventually instead of the other thing
