@@ -493,14 +493,21 @@ fn make_sample(
             mut lower,
             lower_bits,
         } => {
-            if upper > 0 && lower == 0 && delta_is_negative != grad_is_negative {
-                // This amazing hack depends upon the subtraction of 1, below.
-                upper = upper - 1;
-                lower = 1 << (lower_bits - 1) as u16;
-            }
-            if delta_is_negative != grad_is_negative && lower > 0 {
-                let c = (lower - 1) << 1 | 0b1;
-                (upper, c, lower_bits)
+            if delta_is_negative != grad_is_negative {
+                // This block does a wraparound
+                if upper > 0 && lower == 0 {
+                    upper = upper - 1;
+                    lower = 1 << (lower_bits - 1) as u16;
+                }
+                if lower > 0 {
+                    let c = (lower - 1) << 1 | 0b1;
+                    (upper, c, lower_bits)
+                } else {
+                    // This is *only* true when upper == 0 && lower == 0;
+                    // It happens a lot.
+                    assert!(upper == 0 && lower == 0);
+                    (upper, lower << 1, lower_bits)
+                }
             } else {
                 (upper, lower << 1, lower_bits)
             }
