@@ -405,8 +405,9 @@ fn skip(color: Color, row: usize, idx: usize) -> bool {
     }
 }
 
-// TODO: these names are _wrong_.
 enum Sample {
+    // A sample that means 'just use the weighted average as-is'.
+    Zero,
     // This represents the _entire delta_ between the weighted average and the
     // actual value. Use this when we're unable to use split-encoding because
     // we've got a large value of `upper`.
@@ -470,6 +471,7 @@ fn make_sample(
             lower_bits,
             invert,
         } => (upper, lower << 1 | invert as u16, lower_bits),
+        Sample::Zero => (0, 0, 0),
     }
 }
 
@@ -491,7 +493,12 @@ fn compute_sample(
     if upper > 40 {
         Sample::EntireDelta(abs_delta - 1, (delta < 0) == grad_instructs_subtraction)
     } else {
-        if delta == 0 || (delta < 0) == grad_instructs_subtraction {
+        if dec_bits == 0 {
+            // TODO: how does this work / why is it true?
+            assert_eq!(delta, 0);
+            Sample::Zero
+        } else if delta == 0 || (delta < 0) == grad_instructs_subtraction {
+            // TODO: print when delta == 0 here.
             Sample::SplitDelta {
                 upper,
                 lower,
@@ -661,6 +668,7 @@ mod test {
         // TODO: add padding.
         // TODO: prevent printing on failure; but dump somewhere useful instead.
         assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
+        assert!(false);
     }
 
     #[test_case(Grad(256, 1) => 8)]
