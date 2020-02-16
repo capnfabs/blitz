@@ -407,10 +407,12 @@ fn skip(color: Color, row: usize, idx: usize) -> bool {
 
 // TODO: these names are _wrong_.
 enum Sample {
-    // TODO: this represents the _entire delta_ because we blew out the limit on the linear-encoded section
-    Absolute(u16),
-    // TODO: this represents a split encoding based on the gradient.
-    Relative {
+    // This represents the _entire delta_ between the weighted average and the
+    // actual value. Use this when we're unable to use split-encoding because
+    // we've got a large value of `upper`.
+    EntireDelta(u16),
+    // This is the default 'split encoding' mechanism.
+    SplitDelta {
         upper: u16,
         lower: u16,
         lower_bits: usize,
@@ -463,13 +465,13 @@ fn make_sample(
 
     // TODO: all of this needs to be cleaned up dramatically.
     let sample = match sample {
-        Sample::Relative {
+        Sample::SplitDelta {
             upper,
             lower: 0,
             lower_bits,
         } if upper > 0 && delta_is_negative != grad_is_negative => {
             // This amazing hack depends upon the subtraction of 1, below.
-            Sample::Relative {
+            Sample::SplitDelta {
                 upper: upper - 1,
                 lower: 1 << (lower_bits - 1) as u16,
                 lower_bits,
@@ -479,9 +481,11 @@ fn make_sample(
     };
 
     let (s, c, lower_bits) = match sample {
-        Sample::Absolute(val) if delta_is_negative != grad_is_negative => (41, (val - 1) << 1, 14),
-        Sample::Absolute(val) => (41, (val - 1) << 1 | 0b1, 14),
-        Sample::Relative {
+        Sample::EntireDelta(val) if delta_is_negative != grad_is_negative => {
+            (41, (val - 1) << 1, 14)
+        }
+        Sample::EntireDelta(val) => (41, (val - 1) << 1 | 0b1, 14),
+        Sample::SplitDelta {
             upper,
             lower,
             lower_bits,
@@ -509,9 +513,9 @@ fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Samp
     let upper = (delta & (!split_mask)) >> mask_dec_bits;
     let lower = delta & split_mask;
     if upper > 40 {
-        Sample::Absolute(delta)
+        Sample::EntireDelta(delta)
     } else {
-        Sample::Relative {
+        Sample::SplitDelta {
             upper,
             lower,
             lower_bits: dec_bits as usize,
@@ -645,7 +649,7 @@ mod test {
     const COMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.compressed.bin");
 
     #[test]
-    fn end_to_end() {
+    fn end_to_end_stripe_processor() {
         let input = UNCOMPRESSED
             .chunks_exact(2)
             .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
