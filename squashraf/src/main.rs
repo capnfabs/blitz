@@ -461,25 +461,6 @@ fn make_sample(
     // Finally: update gradient.
     grad.update_from_value(delta.abs());
 
-    // FINALLY ENCODE SOME SHIT
-
-    // TODO: all of this needs to be cleaned up dramatically.
-    let sample = match sample {
-        Sample::SplitDelta {
-            upper,
-            lower,
-            lower_bits,
-        } if upper > 0 && lower == 0 && delta_is_negative != grad_is_negative => {
-            // This amazing hack depends upon the subtraction of 1, below.
-            Sample::SplitDelta {
-                upper: upper - 1,
-                lower: 1 << (lower_bits - 1) as u16,
-                lower_bits,
-            }
-        }
-        _ => sample,
-    };
-
     match sample {
         Sample::EntireDelta(val) => {
             if delta_is_negative != grad_is_negative {
@@ -493,23 +474,23 @@ fn make_sample(
             mut lower,
             lower_bits,
         } => {
-            if delta_is_negative != grad_is_negative {
-                // This block does a wraparound
-                if upper > 0 && lower == 0 {
+            if delta == 0 || delta_is_negative == grad_is_negative {
+                (upper, lower << 1, lower_bits)
+            } else {
+                // At this point, we're guaranteed that *either* upper or lower
+                // is non-zero, because we know that delta is non-zero, and upper and
+                // lower come from `delta`.
+                // This is basically wrapping code;
+                if lower == 0 {
+                    assert_ne!(upper, 0);
+                    // Make some adjustments so that subtracting by one will
+                    // work later.
                     upper = upper - 1;
                     lower = 1 << (lower_bits - 1) as u16;
                 }
-                if lower > 0 {
-                    let c = (lower - 1) << 1 | 0b1;
-                    (upper, c, lower_bits)
-                } else {
-                    // This is *only* true when upper == 0 && lower == 0;
-                    // It happens a lot.
-                    assert!(upper == 0 && lower == 0);
-                    (upper, lower << 1, lower_bits)
-                }
-            } else {
-                (upper, lower << 1, lower_bits)
+
+                let c = (lower - 1) << 1 | 0b1;
+                (upper, c, lower_bits)
             }
         }
     }
@@ -680,6 +661,7 @@ mod test {
         // TODO: add padding.
         // TODO: prevent printing on failure; but dump somewhere useful instead.
         assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
+        assert!(false);
     }
 
     #[test_case(Grad(256, 1) => 8)]
