@@ -480,26 +480,27 @@ fn make_sample(
         _ => sample,
     };
 
-    let (s, c, lower_bits) = match sample {
-        Sample::EntireDelta(val) if delta_is_negative != grad_is_negative => {
-            (41, (val - 1) << 1, 14)
+    match sample {
+        Sample::EntireDelta(val) => {
+            if delta_is_negative != grad_is_negative {
+                (41, (val - 1) << 1, 14)
+            } else {
+                (41, (val - 1) << 1 | 0b1, 14)
+            }
         }
-        Sample::EntireDelta(val) => (41, (val - 1) << 1 | 0b1, 14),
         Sample::SplitDelta {
             upper,
             lower,
             lower_bits,
         } => {
-            let c = if delta_is_negative != grad_is_negative && lower > 0 {
-                (lower - 1) << 1 | 0b1
+            if delta_is_negative != grad_is_negative && lower > 0 {
+                let c = (lower - 1) << 1 | 0b1;
+                (upper, c, lower_bits)
             } else {
-                lower << 1
-            };
-            (upper, c, lower_bits)
+                (upper, lower << 1, lower_bits)
+            }
         }
-    };
-
-    (s, c, lower_bits)
+    }
 }
 
 // TODO: this function kinda needs to be explained better.
