@@ -52,7 +52,7 @@ impl std::ops::Add<Offset> for Position {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Debug)]
 pub struct DataGrid<'a, T: Copy> {
     #[derivative(Debug = "ignore")]
@@ -102,5 +102,39 @@ impl<'a, T: Copy> DataGrid<'a, T> {
         let Size(data_width, _) = self.data_size;
         let start = data_y * data_width;
         &self.data[start..start + row_width]
+    }
+}
+
+impl<'a, T: Copy> IntoIterator for &DataGrid<'a, T> {
+    type Item = T;
+    type IntoIter = DataGridIterator<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        DataGridIterator {
+            grid: self.clone(),
+            pos: 0,
+        }
+    }
+}
+
+pub struct DataGridIterator<'a, T: Copy> {
+    grid: DataGrid<'a, T>,
+    pos: usize,
+}
+
+impl<'a, T: Copy> Iterator for DataGridIterator<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Size(width, height) = self.grid.size;
+        if self.pos < width * height {
+            let row = self.pos / width; // Y
+            let col = self.pos % width; // X
+            let val = self.grid.at(Position(col, row));
+            self.pos += 1;
+            Some(val)
+        } else {
+            None
+        }
     }
 }

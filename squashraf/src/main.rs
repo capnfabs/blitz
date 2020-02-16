@@ -12,8 +12,7 @@ mod zip_with_offset;
 use crate::zip_with_offset::zip_with_offset;
 
 use crate::colored::Colored;
-use std::fs::File;
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::iter::repeat;
 
 fn main() {
@@ -140,7 +139,7 @@ fn squash_raf(img_file: &str) {
     process_stripe(&stripe, &cm);
 }
 
-fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
+fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) -> Vec<u8> {
     let mut prev_lines = {
         let zeros = vec![0u16; REQUIRED_CAPACITY];
         Colored::new(
@@ -151,7 +150,7 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
     };
 
     // Ok, there's a separate set of gradients for values in odd and even
-    // x locations in the mapped dataset (I need a better name for this!)
+    // x locations in the mapped dataset (I need a better name for 'the mapped dataset'!)
     // Each 'gradient set' has three sub-sets. I don't know why there's three.
     // Then, each of those sub-sets has 41 'gradients'.
     // You choose the gradient by:
@@ -182,9 +181,7 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) {
     }
     output.pad_to_byte().unwrap();
     // TODO: pad output to hit a 32-bit boundary (I think it's 32 bits, at least).
-    let mut file = File::create("/Users/fabian/Downloads/test-blk.bin").unwrap();
-    file.write_all(data.get_ref()).unwrap();
-    //println!("Line output: {}", hex::encode(data.get_ref()));
+    data.into_inner()
 }
 
 // We need to pass some of the lines from previous lines to future lines, because they're used in calculations.
@@ -214,7 +211,6 @@ struct Grad(i32, i32);
 type Gradients = [[Grad; 41]; 3];
 
 // hardcoded for 14-bit sample size.
-// TODO: give these better names
 const GRADIENT_START_SUM_VALUE: i32 = 256;
 const GRADIENT_MAX_COUNT: i32 = 64;
 
@@ -328,7 +324,7 @@ fn make_samples_for_line(
     output: &mut SampleTarget,
 ) {
     // We make samples interleaving two 'color lines' at a time.
-    let PROCESS = [
+    const PROCESS: [((Color, usize), (Color, usize), usize); 6] = [
         // Key for this: ((ColorA, row), (ColorB, row), gradient_set)
         ((Color::Red, 0), (Color::Green, 0), 0),
         ((Color::Green, 1), (Color::Blue, 0), 1),
@@ -389,7 +385,9 @@ fn make_samples_for_line(
     }
 }
 
-// This is a hardcoded funtion defining pixels to skip. You probably shouldn't do this in the real world but should instead do something else, like, store which things are computed / inferred and which one's aren't, and use that to work out if a value should be skipped or not.
+// This is a hardcoded function defining pixels to skip. You probably shouldn't do this in the real
+// world, but should instead do something else, like, store which things are computed / inferred and
+// which one's aren't, and use that to work out if a value should be skipped or not.
 fn skip(color: Color, row: usize, idx: usize) -> bool {
     if idx % 2 == 1 {
         // never skip odd
@@ -632,9 +630,52 @@ fn fill_blanks_in_line(
     }
 }
 
+#[cfg(test)]
 mod test {
+    use crate::{process_stripe, Grad, STRIPE_WIDTH};
+
+    use libraw::util::{DataGrid, Size};
+
+    use itertools::Itertools;
+    use libraw::Color::{Blue, Green, Red};
+    use std::convert::TryInto;
+    use test_case::test_case;
+
+    const UNCOMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.uncompressed.bin");
+    const COMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.compressed.bin");
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn end_to_end() {
+        let input = UNCOMPRESSED
+            .chunks_exact(2)
+            .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
+            .collect_vec();
+
+        let stripe = DataGrid::wrap(&input, Size(STRIPE_WIDTH, input.len() / STRIPE_WIDTH));
+        let color_map = DataGrid::wrap(
+            &[
+                Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
+                Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green,
+                Red, Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
+            ],
+            Size(6, 6),
+        );
+        let output = process_stripe(&stripe, &color_map);
+        // TODO: add padding.
+        assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
+    }
+
+    #[test_case(Grad(256, 1) => 8)]
+    #[test_case(Grad(256, 2) => 7)]
+    #[test_case(Grad(256, 3) => 7)]
+    #[test_case(Grad(397, 32) => 4)]
+    #[test_case(Grad(397, 63) => 3)]
+    #[test_case(Grad(397, 64) => 3)]
+    #[test_case(Grad(397, 65) => 3)]
+    #[test_case(Grad(397, 140) => 2)]
+    #[test_case(Grad(397, 141) => 2)]
+    #[test_case(Grad(397, 142) => 2)]
+    fn bit_diff(grad: Grad) -> usize {
+        grad.bit_diff()
     }
 }
