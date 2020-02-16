@@ -12,7 +12,9 @@ mod zip_with_offset;
 use crate::zip_with_offset::zip_with_offset;
 
 use crate::colored::Colored;
-use std::io::Cursor;
+use bitbit::BitWriter;
+use std::io;
+use std::io::{Cursor, Write};
 use std::iter::repeat;
 
 fn main() {
@@ -172,14 +174,15 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) -> Vec<u8
     let num_lines = stripe.size().1 / 6;
     // This is where we're going to write the output to.
     let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-    let mut output = bitbit::BitWriter::new(&mut data);
+
+    let mut output = BitOutputSampleTarget::wrap(&mut data);
 
     for line in 0..num_lines {
         let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
         let results = process_line(&line, &color_map, &mut gradients, &prev_lines, &mut output);
         prev_lines = collect_carry_lines(results);
     }
-    output.pad_to_byte().unwrap();
+    output.finalize_block().unwrap();
     // TODO: pad output to hit a 32-bit boundary (I think it's 32 bits, at least).
     data.into_inner()
 }
@@ -249,15 +252,112 @@ struct EvenCoefficients {
     very_north: u16,
 }
 
-type SampleTarget<'a> = bitbit::BitWriter<&'a mut Cursor<Vec<u8>>>;
+trait SampleTarget {
+    fn write(&mut self, sample: Sample) -> io::Result<()>;
+}
+
+struct BitOutputSampleTarget<'a, T: std::io::Write> {
+    writer: BitWriter<ByteCounter<&'a mut T>>,
+}
+
+const BYTE_ALIGNMENT_TARGET: usize = 8;
+
+impl<'a, T: std::io::Write> BitOutputSampleTarget<'a, T> {
+    pub fn wrap(write: &'a mut T) -> Self {
+        let mut bc = ByteCounter::new(write);
+        let bit_output = BitWriter::new(bc);
+        BitOutputSampleTarget { writer: bit_output }
+    }
+
+    fn write_zeros_and_one(&mut self, num_zeros: usize) -> std::io::Result<()> {
+        for _ in 0..num_zeros {
+            self.writer.write_bit(false)?;
+        }
+        self.writer.write_bit(true)
+    }
+
+    pub fn finalize_block(&mut self) -> std::io::Result<()> {
+        self.writer.pad_to_byte()?;
+        let counter = self.writer.get_ref();
+        let pad_bytes = BYTE_ALIGNMENT_TARGET - (counter.bytes_written() % BYTE_ALIGNMENT_TARGET);
+        for _ in 0..pad_bytes {
+            self.writer.write_byte(0)?
+        }
+        Ok(())
+    }
+}
+
+struct ByteCounter<W> {
+    inner: W,
+    count: usize,
+}
+
+impl<W> ByteCounter<W>
+where
+    W: io::Write,
+{
+    fn new(inner: W) -> Self {
+        ByteCounter { inner, count: 0 }
+    }
+
+    fn into_inner(self) -> W {
+        self.inner
+    }
+
+    fn bytes_written(&self) -> usize {
+        self.count
+    }
+}
+
+impl<W> io::Write for ByteCounter<W>
+where
+    W: io::Write,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let res = self.inner.write(buf);
+        if let Ok(size) = res {
+            self.count += size
+        }
+        res
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<'a, T: std::io::Write> SampleTarget for BitOutputSampleTarget<'a, T> {
+    fn write(&mut self, sample: Sample) -> io::Result<()> {
+        match sample {
+            Sample::Zero => self.writer.write_bit(true),
+            Sample::EntireDelta(val, invert) => {
+                self.write_zeros_and_one(41)?;
+                self.writer.write_bits(val as u32, 13)?;
+                self.writer.write_bit(invert)
+            }
+            Sample::SplitDelta {
+                upper,
+                lower,
+                lower_bits,
+                invert,
+            } => {
+                self.write_zeros_and_one(upper as usize)?;
+                if lower_bits != 0 {
+                    self.writer.write_bits(lower as u32, lower_bits)?;
+                }
+                self.writer.write_bit(invert)
+            }
+        }
+    }
+}
 
 // A 'line' is a [strip-width]x6 row of data. This corresponds to the Xtrans 6x6 grid, repeated [strip-width]/6 times horizontally.
-fn process_line(
+fn process_line<T: SampleTarget>(
     line: &DataGrid<u16>,
     color_map: &DataGrid<Color>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
-    output: &mut SampleTarget,
+    output: &mut T,
 ) -> Colored<Vec<Vec<u16>>> {
     let mut colors = Colored::new(
         vec![vec![UNSET; 512]; 3],
@@ -317,11 +417,11 @@ fn q_value(v: i32) -> i32 {
     }
 }
 
-fn make_samples_for_line(
+fn make_samples_for_line<T: SampleTarget>(
     colors: &Colored<Vec<Vec<u16>>>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
-    output: &mut SampleTarget,
+    output: &mut T,
 ) {
     // We make samples interleaving two 'color lines' at a time.
     const PROCESS: [((Color, usize), (Color, usize), usize); 6] = [
@@ -358,7 +458,7 @@ fn make_samples_for_line(
             for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
                 if let Some(((color, row), idx)) = thing {
                     if !skip(*color, *row, idx) {
-                        let (sample, code, code_bits) = make_sample(
+                        let sample = make_sample(
                             &colors,
                             gradients,
                             &carry_results,
@@ -367,17 +467,7 @@ fn make_samples_for_line(
                             idx,
                             *grad_set_idx,
                         );
-
-                        // This is the encoding
-                        // TODO: change the `output` thing to something that accumulates Sample structures.
-                        // That would make this easier to test.
-                        for _ in 0..sample {
-                            output.write_bit(false).unwrap();
-                        }
-                        output.write_bit(true).unwrap();
-                        if code_bits != 0 {
-                            output.write_bits(code as u32, code_bits).unwrap();
-                        }
+                        output.write(sample).unwrap();
                     }
                 }
             }
@@ -430,7 +520,7 @@ fn make_sample(
     color: Color,
     idx: usize,
     grad_set: usize,
-) -> (u16, u16, usize) {
+) -> Sample {
     let is_even = idx % 2 == 0;
     // Setup. Choose coefficients based on color / row etc
     let carry_results = &carry_results[color];
@@ -462,17 +552,7 @@ fn make_sample(
     // Finally: update gradient.
     grad.update_from_value(delta.abs());
 
-    // TODO: move this; it belongs elsewhere.
-    match sample {
-        Sample::EntireDelta(val, invert) => (41, val << 1 | invert as u16, 14),
-        Sample::SplitDelta {
-            upper,
-            lower,
-            lower_bits,
-            invert,
-        } => (upper, lower << 1 | invert as u16, lower_bits),
-        Sample::Zero => (0, 0, 0),
-    }
+    sample
 }
 
 // TODO: this function kinda needs to be explained better.
@@ -490,36 +570,38 @@ fn compute_sample(
     // 'sample' in libraw terminology
     let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
     let lower = abs_delta & split_mask;
+
+    // Here's the bit where we decide how to encode the sample.
+    // TODO: we can probably change this structure such that it accepts some
+    // input parameters and then decides on the encoding later. Could be useful
+    // for making it clearer how this encoding process works?
     if upper > 40 {
         Sample::EntireDelta(abs_delta - 1, (delta < 0) == grad_instructs_subtraction)
+    } else if dec_bits == 0 {
+        // TODO: how does this work / why is it true?
+        // If dec_bits is zero, delta is always zero, but it's not true in
+        // reverse.
+        assert_eq!(delta, 0);
+        Sample::Zero
+    } else if delta == 0 || (delta < 0) == grad_instructs_subtraction {
+        Sample::SplitDelta {
+            upper,
+            lower,
+            lower_bits: mask_dec_bits as usize,
+            invert: false,
+        }
     } else {
-        if dec_bits == 0 {
-            // TODO: how does this work / why is it true?
-            assert_eq!(delta, 0);
-            Sample::Zero
-        } else if delta == 0 || (delta < 0) == grad_instructs_subtraction {
-            // TODO: print when delta == 0 here.
-            Sample::SplitDelta {
-                upper,
-                lower,
-                lower_bits: dec_bits as usize,
-                invert: false,
-            }
-        } else {
-            // We're guaranteed this is non-zero by previous branch.
-            // Subtract one and re-split.
-            let abs_delta = abs_delta - 1;
-            let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
-            let lower = abs_delta & split_mask;
+        // We're guaranteed this is non-zero by previous branch.
+        // Subtract one and re-split.
+        let abs_delta = abs_delta - 1;
+        let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
+        let lower = abs_delta & split_mask;
 
-            Sample::SplitDelta {
-                upper,
-                lower,
-                // TODO: right now, lower_bits includes the sign bit, and it shouldn't.
-                // The issue is when dec_bits is 0; but we should probably handle that with a different enum value.
-                lower_bits: dec_bits as usize,
-                invert: true,
-            }
+        Sample::SplitDelta {
+            upper,
+            lower,
+            lower_bits: mask_dec_bits as usize,
+            invert: true,
         }
     }
 }
@@ -667,8 +749,10 @@ mod test {
         let output = process_stripe(&stripe, &color_map);
         // TODO: add padding.
         // TODO: prevent printing on failure; but dump somewhere useful instead.
-        assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
-        assert!(false);
+        let actual = output.as_slice();
+        let expected = COMPRESSED;
+        assert_eq!(actual.len(), expected.len());
+        assert_eq!(actual, expected);
     }
 
     #[test_case(Grad(256, 1) => 8)]
