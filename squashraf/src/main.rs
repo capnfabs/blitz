@@ -410,12 +410,13 @@ enum Sample {
     // This represents the _entire delta_ between the weighted average and the
     // actual value. Use this when we're unable to use split-encoding because
     // we've got a large value of `upper`.
-    EntireDelta(u16),
+    EntireDelta(u16, bool),
     // This is the default 'split encoding' mechanism.
     SplitDelta {
         upper: u16,
         lower: u16,
         lower_bits: usize,
+        invert: bool,
     },
 }
 
@@ -454,65 +455,64 @@ fn make_sample(
     let grad = &mut grad_set[which_grad.abs() as usize];
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
-    let sample = compute_sample(weighted_average, actual_value, grad);
+    let sample = compute_sample(weighted_average, actual_value, grad, grad_is_negative);
     let delta = actual_value as i32 - weighted_average as i32;
-    let delta_is_negative = delta < 0;
 
     // Finally: update gradient.
     grad.update_from_value(delta.abs());
 
+    // TODO: move this; it belongs elsewhere.
     match sample {
-        Sample::EntireDelta(val) => {
-            if delta_is_negative != grad_is_negative {
-                (41, (val - 1) << 1, 14)
-            } else {
-                (41, (val - 1) << 1 | 0b1, 14)
-            }
-        }
+        Sample::EntireDelta(val, invert) => (41, val << 1 | invert as u16, 14),
         Sample::SplitDelta {
-            mut upper,
-            mut lower,
+            upper,
+            lower,
             lower_bits,
-        } => {
-            if delta == 0 || delta_is_negative == grad_is_negative {
-                (upper, lower << 1, lower_bits)
-            } else {
-                // At this point, we're guaranteed that *either* upper or lower
-                // is non-zero, because we know that delta is non-zero, and upper and
-                // lower come from `delta`.
-                // This is basically wrapping code;
-                if lower == 0 {
-                    assert_ne!(upper, 0);
-                    // Make some adjustments so that subtracting by one will
-                    // work later.
-                    upper = upper - 1;
-                    lower = 1 << (lower_bits - 1) as u16;
-                }
-
-                let c = (lower - 1) << 1 | 0b1;
-                (upper, c, lower_bits)
-            }
-        }
+            invert,
+        } => (upper, lower << 1 | invert as u16, lower_bits),
     }
 }
 
 // TODO: this function kinda needs to be explained better.
-fn compute_sample(weighted_average: u16, actual_value: u16, grad: &Grad) -> Sample {
+fn compute_sample(
+    weighted_average: u16,
+    actual_value: u16,
+    grad: &Grad,
+    grad_instructs_subtraction: bool,
+) -> Sample {
     let delta = actual_value as i32 - weighted_average as i32;
-    let delta = delta.abs() as u16;
+    let abs_delta = delta.abs() as u16;
     let dec_bits = grad.bit_diff() as u16;
     let mask_dec_bits = dec_bits.saturating_sub(1);
     let split_mask = (1 << mask_dec_bits) - 1;
     // 'sample' in libraw terminology
-    let upper = (delta & (!split_mask)) >> mask_dec_bits;
-    let lower = delta & split_mask;
+    let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
+    let lower = abs_delta & split_mask;
     if upper > 40 {
-        Sample::EntireDelta(delta)
+        Sample::EntireDelta(abs_delta - 1, (delta < 0) == grad_instructs_subtraction)
     } else {
-        Sample::SplitDelta {
-            upper,
-            lower,
-            lower_bits: dec_bits as usize,
+        if delta == 0 || (delta < 0) == grad_instructs_subtraction {
+            Sample::SplitDelta {
+                upper,
+                lower,
+                lower_bits: dec_bits as usize,
+                invert: false,
+            }
+        } else {
+            // We're guaranteed this is non-zero by previous branch.
+            // Subtract one and re-split.
+            let abs_delta = abs_delta - 1;
+            let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
+            let lower = abs_delta & split_mask;
+
+            Sample::SplitDelta {
+                upper,
+                lower,
+                // TODO: right now, lower_bits includes the sign bit, and it shouldn't.
+                // The issue is when dec_bits is 0; but we should probably handle that with a different enum value.
+                lower_bits: dec_bits as usize,
+                invert: true,
+            }
         }
     }
 }
@@ -661,7 +661,6 @@ mod test {
         // TODO: add padding.
         // TODO: prevent printing on failure; but dump somewhere useful instead.
         assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
-        assert!(false);
     }
 
     #[test_case(Grad(256, 1) => 8)]
