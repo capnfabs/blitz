@@ -7,14 +7,16 @@ use libraw::{Color, RawFile};
 
 mod colored;
 mod evenodd;
+mod util;
 mod zip_with_offset;
 
 use crate::zip_with_offset::zip_with_offset;
 
 use crate::colored::Colored;
+use crate::util::ByteCounter;
 use bitbit::BitWriter;
 use std::io;
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 use std::iter::repeat;
 
 fn main() {
@@ -138,10 +140,19 @@ fn squash_raf(img_file: &str) {
         Position(0, 0),
         Size(STRIPE_WIDTH, file.img_params().raw_height as usize),
     );
-    process_stripe(&stripe, &cm);
+    // This is where we're going to write the output to.
+    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+
+    let mut output = BitOutputSampleTarget::wrap(&mut data);
+    process_stripe(&stripe, &cm, &mut output);
+    output.finalize_block().unwrap();
 }
 
-fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) -> Vec<u8> {
+fn process_stripe<T: SampleTarget>(
+    stripe: &DataGrid<u16>,
+    color_map: &DataGrid<Color>,
+    output: &mut T,
+) {
     let mut prev_lines = {
         let zeros = vec![0u16; REQUIRED_CAPACITY];
         Colored::new(
@@ -172,19 +183,12 @@ fn process_stripe(stripe: &DataGrid<u16>, color_map: &DataGrid<Color>) -> Vec<u8
     );
 
     let num_lines = stripe.size().1 / 6;
-    // This is where we're going to write the output to.
-    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-
-    let mut output = BitOutputSampleTarget::wrap(&mut data);
 
     for line in 0..num_lines {
         let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
-        let results = process_line(&line, &color_map, &mut gradients, &prev_lines, &mut output);
+        let results = process_line(&line, &color_map, &mut gradients, &prev_lines, output);
         prev_lines = collect_carry_lines(results);
     }
-    output.finalize_block().unwrap();
-    // TODO: pad output to hit a 32-bit boundary (I think it's 32 bits, at least).
-    data.into_inner()
 }
 
 // We need to pass some of the lines from previous lines to future lines, because they're used in calculations.
@@ -264,8 +268,7 @@ const BYTE_ALIGNMENT_TARGET: usize = 8;
 
 impl<'a, T: std::io::Write> BitOutputSampleTarget<'a, T> {
     pub fn wrap(write: &'a mut T) -> Self {
-        let mut bc = ByteCounter::new(write);
-        let bit_output = BitWriter::new(bc);
+        let bit_output = BitWriter::new(ByteCounter::new(write));
         BitOutputSampleTarget { writer: bit_output }
     }
 
@@ -284,45 +287,6 @@ impl<'a, T: std::io::Write> BitOutputSampleTarget<'a, T> {
             self.writer.write_byte(0)?
         }
         Ok(())
-    }
-}
-
-struct ByteCounter<W> {
-    inner: W,
-    count: usize,
-}
-
-impl<W> ByteCounter<W>
-where
-    W: io::Write,
-{
-    fn new(inner: W) -> Self {
-        ByteCounter { inner, count: 0 }
-    }
-
-    fn into_inner(self) -> W {
-        self.inner
-    }
-
-    fn bytes_written(&self) -> usize {
-        self.count
-    }
-}
-
-impl<W> io::Write for ByteCounter<W>
-where
-    W: io::Write,
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let res = self.inner.write(buf);
-        if let Ok(size) = res {
-            self.count += size
-        }
-        res
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
     }
 }
 
@@ -718,13 +682,14 @@ fn fill_blanks_in_line(
 
 #[cfg(test)]
 mod test {
-    use crate::{process_stripe, Grad, STRIPE_WIDTH};
+    use crate::{process_stripe, BitOutputSampleTarget, Grad, STRIPE_WIDTH};
 
     use libraw::util::{DataGrid, Size};
 
     use itertools::Itertools;
     use libraw::Color::{Blue, Green, Red};
     use std::convert::TryInto;
+    use std::io::Cursor;
     use test_case::test_case;
 
     const UNCOMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.uncompressed.bin");
@@ -746,8 +711,12 @@ mod test {
             ],
             Size(6, 6),
         );
-        let output = process_stripe(&stripe, &color_map);
-        // TODO: add padding.
+        let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+
+        let mut output = BitOutputSampleTarget::wrap(&mut data);
+        process_stripe(&stripe, &color_map, &mut output);
+        output.finalize_block().unwrap();
+        let output = data.into_inner();
         // TODO: prevent printing on failure; but dump somewhere useful instead.
         let actual = output.as_slice();
         let expected = COMPRESSED;
