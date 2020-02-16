@@ -467,9 +467,9 @@ fn make_sample(
     let sample = match sample {
         Sample::SplitDelta {
             upper,
-            lower: 0,
+            lower,
             lower_bits,
-        } if upper > 0 && delta_is_negative != grad_is_negative => {
+        } if upper > 0 && lower == 0 && delta_is_negative != grad_is_negative => {
             // This amazing hack depends upon the subtraction of 1, below.
             Sample::SplitDelta {
                 upper: upper - 1,
@@ -489,10 +489,15 @@ fn make_sample(
             }
         }
         Sample::SplitDelta {
-            upper,
-            lower,
+            mut upper,
+            mut lower,
             lower_bits,
         } => {
+            if upper > 0 && lower == 0 && delta_is_negative != grad_is_negative {
+                // This amazing hack depends upon the subtraction of 1, below.
+                upper = upper - 1;
+                lower = 1 << (lower_bits - 1) as u16;
+            }
             if delta_is_negative != grad_is_negative && lower > 0 {
                 let c = (lower - 1) << 1 | 0b1;
                 (upper, c, lower_bits)
@@ -529,7 +534,6 @@ fn grad_and_weighted_avg_even(idx: usize, rprevprev: &[u16], rprev: &[u16]) -> (
     let weighted_average = compute_weighted_average_even(ec);
     let which_grad = 9 * q_value(ec.north as i32 - ec.very_north as i32)
         + q_value(ec.northwest as i32 - ec.north as i32);
-    //println!("even which grad {}, ec = {:?}", which_grad, ec);
     (weighted_average, which_grad)
 }
 
@@ -667,6 +671,7 @@ mod test {
         );
         let output = process_stripe(&stripe, &color_map);
         // TODO: add padding.
+        // TODO: prevent printing on failure; but dump somewhere useful instead.
         assert_eq!(output.as_slice(), &COMPRESSED[0..COMPRESSED.len() - 6]);
     }
 
