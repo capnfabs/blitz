@@ -5,15 +5,15 @@ use itertools::Itertools;
 use libraw::util::{DataGrid, Position, Size};
 use libraw::{Color, RawFile};
 
+mod bytecounter;
 mod colored;
 mod evenodd;
-mod util;
 mod zip_with_offset;
 
 use crate::zip_with_offset::zip_with_offset;
 
+use crate::bytecounter::ByteCounter;
 use crate::colored::Colored;
-use crate::util::ByteCounter;
 use bitbit::BitWriter;
 use std::io;
 use std::io::Cursor;
@@ -212,7 +212,7 @@ fn collect_carry_lines(results: Colored<Vec<Vec<u16>>>) -> Colored<Vec<Vec<u16>>
     )
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Grad(i32, i32);
 
 type Gradients = [[Grad; 41]; 3];
@@ -465,6 +465,8 @@ enum Sample {
     // This represents the _entire delta_ between the weighted average and the
     // actual value. Use this when we're unable to use split-encoding because
     // we've got a large value of `upper`.
+    // the second part of this tuple indicates whether the value should be
+    // inverted, i.e. made negative.
     EntireDelta(u16, bool),
     // This is the default 'split encoding' mechanism.
     SplitDelta {
@@ -510,10 +512,11 @@ fn make_sample(
     let grad = &mut grad_set[which_grad.abs() as usize];
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
+
     let sample = compute_sample(weighted_average, actual_value, grad, grad_is_negative);
-    let delta = actual_value as i32 - weighted_average as i32;
 
     // Finally: update gradient.
+    let delta = actual_value as i32 - weighted_average as i32;
     grad.update_from_value(delta.abs());
 
     sample
@@ -736,5 +739,13 @@ mod test {
     #[test_case(Grad(397, 142) => 2)]
     fn bit_diff(grad: Grad) -> usize {
         grad.bit_diff()
+    }
+
+    #[test_case(Grad(256, 1), 100 => Grad(356, 2); "works outside wrapping range")]
+    #[test_case(Grad(14343, 63), 100 => Grad(14443, 64); "at the wrapping boundary")]
+    #[test_case(Grad(14343, 64), 1 => Grad(7172, 33); "test wrapping")]
+    fn update(mut grad: Grad, update_val: i32) -> Grad {
+        grad.update_from_value(update_val);
+        grad
     }
 }
