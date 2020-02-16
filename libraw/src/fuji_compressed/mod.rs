@@ -1,6 +1,11 @@
 // Still WIP
 #![allow(unused_variables)]
 
+mod bytecounter;
+mod compress;
+mod evenodd;
+mod zip_with_offset;
+
 use nom::bytes::complete::take;
 use nom::bytes::streaming::tag;
 use nom::combinator::map;
@@ -8,6 +13,8 @@ use nom::multi::count;
 use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::sequence::tuple;
 use nom::IResult;
+
+pub use compress::compress;
 
 #[derive(Debug)]
 struct FujiCompressedHeader {

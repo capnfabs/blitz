@@ -1,4 +1,4 @@
-use libraw::Color;
+use crate::Color;
 
 pub struct Colored<T>(Vec<T>);
 

@@ -4,5 +4,4 @@ members = [
     "blitz",
     "libraw-sys",
     "libraw",
-    "squashraf",
 ]

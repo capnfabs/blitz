@@ -1,4 +1,4 @@
-mod fuji_compressed;
+pub mod fuji_compressed;
 pub mod raf;
 mod tiff;
 pub mod util;

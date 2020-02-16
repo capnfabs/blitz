@@ -1,33 +1,13 @@
-// Still WIP
-
-use clap::{App, Arg};
 use itertools::Itertools;
-use libraw::util::{DataGrid, Position, Size};
-use libraw::{Color, RawFile};
 
-mod bytecounter;
-mod colored;
-mod evenodd;
-mod zip_with_offset;
-
-use crate::zip_with_offset::zip_with_offset;
-
-use crate::bytecounter::ByteCounter;
-use crate::colored::Colored;
+use crate::fuji_compressed::bytecounter::ByteCounter;
+use crate::fuji_compressed::zip_with_offset::zip_with_offset;
+use crate::util::colored::Colored;
+use crate::util::datagrid::{DataGrid, Position, Size};
+use crate::Color;
 use bitbit::BitWriter;
 use std::io;
-use std::io::Cursor;
 use std::iter::repeat;
-
-fn main() {
-    let matches = App::new("Squashraf")
-        .arg(Arg::with_name("INPUT").required(true).index(1))
-        .get_matches();
-
-    let input = matches.value_of("INPUT").unwrap();
-
-    squash_raf(input);
-}
 
 const STRIPE_WIDTH: usize = 768;
 // There's a max of 4 green pixels out of every 6, so we need 512 slots for every line of pixels
@@ -115,34 +95,12 @@ fn fill_blanks_in_row(row: &mut [u16], rprev: &[u16], rprevprev: &[u16]) {
 // and this is bigger than that.
 const UNSET: u16 = 0xFFFF;
 
-fn squash_raf(img_file: &str) {
-    println!("Loading RAW data: libraw");
-    let file = RawFile::open(img_file).unwrap();
-    println!("Opened file: {:?}", file);
-
-    let img_grid = DataGrid::wrap(
-        file.raw_data(),
-        Size(
-            file.img_params().raw_width as usize,
-            file.img_params().raw_height as usize,
-        ),
-    );
-    let xtmap = file
-        .xtrans_pixel_mapping()
-        .iter()
-        .flatten()
-        .copied()
-        .collect_vec();
-    let cm = DataGrid::wrap(&xtmap, Size(6, 6));
-
+pub fn compress<T: io::Write>(img_grid: DataGrid<u16>, cm: &DataGrid<Color>, mut data: T) {
     // TODO: loop this.
     let stripe = img_grid.subgrid(
         Position(0, 0),
-        Size(STRIPE_WIDTH, file.img_params().raw_height as usize),
+        Size(STRIPE_WIDTH, img_grid.size().1 as usize),
     );
-    // This is where we're going to write the output to.
-    let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-
     let mut output = BitOutputSampleTarget::wrap(&mut data);
     process_stripe(&stripe, &cm, &mut output);
     output.finalize_block().unwrap();
@@ -685,18 +643,19 @@ fn fill_blanks_in_line(
 
 #[cfg(test)]
 mod test {
-    use crate::{process_stripe, BitOutputSampleTarget, Grad, STRIPE_WIDTH};
 
-    use libraw::util::{DataGrid, Size};
-
+    use crate::fuji_compressed::compress::{
+        process_stripe, BitOutputSampleTarget, Grad, STRIPE_WIDTH,
+    };
+    use crate::util::datagrid::{DataGrid, Size};
+    use crate::Color::{Blue, Green, Red};
     use itertools::Itertools;
-    use libraw::Color::{Blue, Green, Red};
     use std::convert::TryInto;
     use std::io::Cursor;
     use test_case::test_case;
 
-    const UNCOMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.uncompressed.bin");
-    const COMPRESSED: &[u8] = include_bytes!("DSCF2279-block0.compressed.bin");
+    const UNCOMPRESSED: &[u8] = include_bytes!("testdata/DSCF2279-block0.uncompressed.bin");
+    const COMPRESSED: &[u8] = include_bytes!("testdata/DSCF2279-block0.compressed.bin");
 
     #[test]
     fn end_to_end_stripe_processor() {

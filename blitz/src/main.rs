@@ -5,7 +5,7 @@ use git2::Repository;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::{DataGrid, Offset, Position, Size};
+use libraw::util::datagrid::{DataGrid, Offset, Position, Size};
 use libraw::{Color, RawFile};
 use num_traits::{Num, Unsigned};
 use ordered_float::NotNan;
