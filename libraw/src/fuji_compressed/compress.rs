@@ -133,7 +133,9 @@ impl<'a, T: std::io::Write> BitOutputSampleTarget<'a, T> {
 impl<'a, T: std::io::Write> SampleTarget for BitOutputSampleTarget<'a, T> {
     fn write(&mut self, sample: Sample) -> io::Result<()> {
         match sample {
-            Sample::Zero => self.writer.write_bit(true),
+            Sample::JustUpper(val, invert) => {
+                self.write_zeros_and_one((val << 1 & invert as u16) as usize)
+            }
             Sample::EntireDelta(val, invert) => {
                 self.write_zeros_and_one(41)?;
                 self.writer.write_bits(val as u32, 13)?;
@@ -312,8 +314,7 @@ fn compute_sample(
         // TODO: how does this work / why is it true?
         // If dec_bits is zero, delta is always zero, but it's not true in
         // reverse.
-        assert_eq!(delta, 0);
-        Sample::Zero
+        Sample::JustUpper(upper, (delta < 0) == grad_instructs_subtraction)
     } else if delta == 0 || (delta < 0) == grad_instructs_subtraction {
         Sample::SplitDelta {
             upper,

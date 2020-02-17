@@ -179,6 +179,14 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
     }
 
     pub fn subgrid(&mut self, offset: Position, size: Size) -> MutableDataGrid<T> {
+        self.check_pos(offset);
+        // size 0 is always ok
+        if size.0 > 0 && size.1 > 0 {
+            // Subtract one here because size is exclusive and the check is
+            // inclusive.
+            self.check_pos(Position(offset.0 + size.0 - 1, offset.1 + size.1 - 1))
+        }
+        // Subtract one from these because e.g. 0 + 5 - 1
         MutableDataGrid {
             data: self.data,
             data_size: self.data_size,
@@ -188,10 +196,10 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
     }
 
     pub fn row_mut(&mut self, which: Y) -> &mut [T] {
-        let Position(_, data_y) = Position(0, which).extending(self.anchor_pos);
+        let Position(data_x, data_y) = Position(0, which).extending(self.anchor_pos);
         let Size(row_width, _) = self.size;
         let Size(data_width, _) = self.data_size;
-        let start = data_y * data_width;
+        let start = data_y * data_width + data_x;
         &mut self.data[start..start + row_width]
     }
 

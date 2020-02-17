@@ -9,6 +9,7 @@ mod process_common;
 mod sample;
 mod zip_with_offset;
 
+use hex;
 use nom::bytes::complete::take;
 use nom::bytes::streaming::tag;
 use nom::combinator::map;
@@ -18,6 +19,7 @@ use nom::sequence::tuple;
 use nom::IResult;
 
 pub use compress::compress;
+use std::io::Cursor;
 
 #[derive(Debug)]
 struct FujiCompressedHeader {
@@ -100,25 +102,16 @@ fn read_blocks<'a>(input: I<'a>, block_sizes: &[u32]) -> IResult<I<'a>, Vec<&'a 
     Ok((i, blocks))
 }
 
-fn decode_block(block: I) -> Vec<u16> {
-    vec![]
-}
-
-fn join_blocks(blocks: &[&[u16]]) -> Vec<u16> {
-    vec![]
-}
-
 pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     let i = input;
     let (i, header) = parse_fuji_header(i)?;
     // TODO: build quantisation tables
     let (i, block_sizes) = block_sizes(i, header.num_blocks)?;
     let (i, blocks) = read_blocks(i, &block_sizes)?;
-    // I dunno, this feels like fighting the borrow checker a lot
-    let decoded_blocks: Vec<Vec<u16>> = blocks.iter().map(|b| decode_block(b)).collect();
-    let block_refs: Vec<&[u16]> = decoded_blocks.iter().map(|x| x.as_slice()).collect();
-    let output = join_blocks(&block_refs);
-
     println!("Compressed: {:#?}", header);
+    println!("Blocks: {:#?}", block_sizes);
+    println!("block 1 first 20: {:?}", hex::encode(&blocks[1][0..20]));
+    let blocks = blocks.iter().map(|x| Cursor::new(x));
+    let output = inflate::inflate(blocks, &inflate::make_color_map());
     Ok((input, output))
 }

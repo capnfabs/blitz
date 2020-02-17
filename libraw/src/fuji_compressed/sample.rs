@@ -49,8 +49,8 @@ impl Default for Grad {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Sample {
-    // A sample that means 'just use the weighted average as-is'.
-    Zero,
+    // Just the 'upper' section.
+    JustUpper(u16, bool),
     // This represents the _entire delta_ between the weighted average and the
     // actual value. Use this when we're unable to use split-encoding because
     // we've got a large value of `upper`.

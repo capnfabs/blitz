@@ -8,12 +8,15 @@ use crate::fuji_compressed::process_common::{
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
+use crate::util::datagrid::{DataGrid, MutableDataGrid, Offset, Position, Size};
 use crate::Color;
+use crate::Color::{Blue, Green, Red};
 use bitbit::{BitReader, MSB};
-use itertools::Itertools;
+use itertools::{zip, Itertools};
 use std::io;
+use std::io::SeekFrom;
 use std::iter::repeat;
+use std::process::Output;
 
 // There's a max of 4 green pixels out of every 6, so we need 512 slots for every line of 768 pixels (for example)
 // TODO: un-hardcode
@@ -22,9 +25,52 @@ const STRIPE_WIDTH: usize = 768;
 const IMG_WIDTH: usize = 6048;
 const REQUIRED_CAPACITY: usize = STRIPE_WIDTH * 4 / 6;
 const NUM_LINES: usize = 673;
+const IMG_HEIGHT: usize = NUM_LINES * 6;
+const STRIPE_SIZE: Size = Size(STRIPE_WIDTH, IMG_HEIGHT);
 
-pub fn inflate_stripe<T: io::Read>(
-    reader: T,
+// TODO: this is temp and should be removed
+pub fn make_color_map() -> DataGrid<'static, Color> {
+    DataGrid::wrap(
+        &[
+            Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
+            Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green, Red,
+            Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
+        ],
+        Size(6, 6),
+    )
+}
+
+pub fn inflate(
+    blocks: impl Iterator<Item = impl io::Read>,
+    color_map: &DataGrid<Color>,
+) -> Vec<u16> {
+    let num_stripes = (IMG_WIDTH as f32 / STRIPE_WIDTH as f32).ceil() as usize;
+    // TODO: maybe init as not zeros, but as unset instead.
+    let mut output = vec![0; IMG_WIDTH * IMG_HEIGHT];
+    let mut mg = MutableDataGrid::new(&mut output, Size(IMG_WIDTH, IMG_HEIGHT));
+    for (stripe_num, block) in (0..num_stripes).zip(blocks) {
+        if stripe_num == 7 {
+            continue;
+        }
+        let stripe_start = stripe_num * STRIPE_WIDTH;
+        let stripe_end = stripe_start + STRIPE_WIDTH;
+        let mut stripe_grid = if stripe_end < IMG_WIDTH {
+            mg.subgrid(Position(stripe_start, 0), STRIPE_SIZE)
+        } else {
+            mg.subgrid(
+                Position(stripe_start, 0),
+                Size(IMG_WIDTH - stripe_start, IMG_HEIGHT),
+            )
+        };
+        println!("Starting stripe {}", stripe_num);
+        inflate_stripe(block, color_map, &mut stripe_grid);
+        println!("Finished stripe {}", stripe_num);
+    }
+    output
+}
+
+pub fn inflate_stripe(
+    reader: impl io::Read,
     color_map: &DataGrid<Color>,
     output: &mut MutableDataGrid<u16>,
 ) {
@@ -65,9 +111,9 @@ fn map_contiguous_colors_to_xtrans(
     for (_, x) in colors.iter() {
         assert_eq!(x.len(), REQUIRED_CAPACITY);
     }
-    assert_eq!(output_row.len(), STRIPE_WIDTH);
+    assert!(output_row.len() <= STRIPE_WIDTH);
     for (pos, val) in output_row.iter_mut().enumerate() {
-        // TODO: extract into a method, also used in map_xtrans_to_contiugous_colors
+        // TODO: extract into a method, also used in map_xtrans_to_contiguous_colors
         let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
         let color = row_color_map.at(Position(pos, 0));
         *val = colors[color][squashed_idx];
@@ -189,7 +235,24 @@ fn compute_value_and_update_gradients<R: io::Read>(
     } else {
         (weighted_average as i32 + delta as i32)
     };
+
+    let old_grad = grad.clone();
+
     grad.update_from_value(delta.abs());
+
+    /*
+    println!(
+        "{}{}[{}]: ref: {}, actual: {}, grad_neg: {}, grad_before: {:?}, grad_after: {:?}",
+        color.letter(),
+        row_idx,
+        idx,
+        weighted_average,
+        actual_value,
+        grad_instructs_subtraction as u8,
+        old_grad,
+        grad,
+    );*/
+
     assert!(actual_value < (1 << 14));
     actual_value as u16
 }
@@ -213,9 +276,9 @@ fn read_sample<T: io::Read>(
         // Fix it in the EntireDelta type by naming it properly.
         Ok(Sample::EntireDelta(lower as u16, !invert))
     } else if lower_bits == 0 {
-        // TODO: not sure why this is true, but it is. There's a corresponding todo in the writer.
-        assert_eq!(upper, 0);
-        Ok(Sample::Zero)
+        // TODO: I've probably named this wrong, see above
+        let invert = (upper & 0b1) != 0;
+        Ok(Sample::JustUpper(upper >> 1, invert))
     } else {
         // TODO: the story around dec_bits is a hot mess and needs to be fixed.
         let lower_bits = lower_bits - 1;
@@ -234,7 +297,14 @@ fn read_sample<T: io::Read>(
 
 fn sample_to_delta(sample: Sample) -> i32 {
     match sample {
-        Sample::Zero => 0,
+        Sample::JustUpper(val, invert) => {
+            let val = val as i32;
+            if invert {
+                -(val + 1)
+            } else {
+                val
+            }
+        }
         Sample::EntireDelta(val, invert) => {
             let val = val as i32 + 1;
             if invert {
@@ -262,7 +332,9 @@ fn sample_to_delta(sample: Sample) -> i32 {
 
 #[cfg(test)]
 mod test {
-    use crate::fuji_compressed::inflate::{inflate_stripe, NUM_LINES, STRIPE_WIDTH};
+    use crate::fuji_compressed::inflate::{
+        inflate_stripe, make_color_map, NUM_LINES, STRIPE_WIDTH,
+    };
     use crate::fuji_compressed::process_common::UNSET;
     use crate::util::datagrid::{DataGrid, MutableDataGrid, Size};
     use crate::Color::{Blue, Green, Red};
@@ -280,18 +352,10 @@ mod test {
             .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
             .collect_vec();
 
-        let color_map = DataGrid::wrap(
-            &[
-                Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
-                Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green,
-                Red, Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
-            ],
-            Size(6, 6),
-        );
         let mut actual_data = vec![UNSET; STRIPE_WIDTH * NUM_LINES * 6];
         let mut output = MutableDataGrid::new(&mut actual_data, Size(STRIPE_WIDTH, NUM_LINES * 6));
 
-        inflate_stripe(COMPRESSED, &color_map, &mut output);
+        inflate_stripe(&mut COMPRESSED, &make_color_map(), &mut output);
         assert_eq!(actual_data.len(), expected.len());
         assert_eq!(actual_data, expected.as_slice());
     }
