@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 type X = usize;
 type Y = usize;
 
@@ -136,5 +138,90 @@ impl<'a, T: Copy> Iterator for DataGridIterator<'a, T> {
         } else {
             None
         }
+    }
+}
+
+// TODO: unify everything into MutableDataGrid if it's possible, and add a 'wrapping' datagrid which is the same but supports wrapping for reads.
+pub struct MutableDataGrid<'a, T: Copy> {
+    data: &'a mut [T],
+    data_size: Size,
+    size: Size,
+    anchor_pos: Position,
+}
+
+impl<'a, T: Copy> MutableDataGrid<'a, T> {
+    pub fn into_inner(self) -> &'a mut [T] {
+        self.data
+    }
+
+    #[inline]
+    fn check_pos(&self, position: Position) {
+        let Size(width, height) = self.size;
+        let Position(x, y) = position;
+        if x >= width {
+            panic!("X value {} is out of bounds for width {}", x, width);
+        }
+        if y >= height {
+            panic!("Y value {} is out of bounds for height {}", y, height);
+        }
+    }
+
+    pub fn new(vals: &mut [T], size: Size) -> MutableDataGrid<T> {
+        if size.count() != vals.len() {
+            panic!("dimensions of size and vals don't match up")
+        }
+        MutableDataGrid {
+            data: vals,
+            data_size: size,
+            size,
+            anchor_pos: Position(0, 0),
+        }
+    }
+
+    pub fn subgrid(&mut self, offset: Position, size: Size) -> MutableDataGrid<T> {
+        MutableDataGrid {
+            data: self.data,
+            data_size: self.data_size,
+            anchor_pos: offset.extending(self.anchor_pos),
+            size,
+        }
+    }
+
+    pub fn row_mut(&mut self, which: Y) -> &mut [T] {
+        let Position(_, data_y) = Position(0, which).extending(self.anchor_pos);
+        let Size(row_width, _) = self.size;
+        let Size(data_width, _) = self.data_size;
+        let start = data_y * data_width;
+        &mut self.data[start..start + row_width]
+    }
+
+    pub fn size(&self) -> Size {
+        self.size
+    }
+}
+
+impl<'a, T: Copy> Index<Position> for MutableDataGrid<'a, T> {
+    type Output = T;
+
+    fn index(&self, index: Position) -> &Self::Output {
+        self.check_pos(index);
+
+        let Position(data_x, data_y) = index.extending(self.anchor_pos);
+
+        let Size(data_width, _) = self.data_size;
+
+        &self.data[data_y * data_width + data_x]
+    }
+}
+
+impl<'a, T: Copy> IndexMut<Position> for MutableDataGrid<'a, T> {
+    fn index_mut(&mut self, index: Position) -> &mut Self::Output {
+        self.check_pos(index);
+
+        let Position(data_x, data_y) = index.extending(self.anchor_pos);
+
+        let Size(data_width, _) = self.data_size;
+
+        &mut self.data[data_y * data_width + data_x]
     }
 }
