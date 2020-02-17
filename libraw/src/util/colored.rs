@@ -22,6 +22,10 @@ impl<T> Colored<T> {
         let (g, b) = rest.split_at_mut(1);
         (&mut r[0], &mut g[0], &mut b[0])
     }
+
+    pub fn split(&self) -> (&T, &T, &T) {
+        (&self.0[0], &self.0[1], &self.0[2])
+    }
 }
 
 impl<'a, T> IntoIterator for &'a Colored<T> {

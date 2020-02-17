@@ -1,0 +1,296 @@
+#![allow(unused)]
+
+use crate::fuji_compressed::process_common::{
+    collect_carry_lines, compute_weighted_average_even, flatten, grad_and_weighted_avg_even,
+    grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, load_odd_coefficients,
+    PROCESS, UNSET,
+};
+use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
+use crate::fuji_compressed::zip_with_offset::zip_with_offset;
+use crate::util::colored::Colored;
+use crate::util::datagrid::{DataGrid, Position, Size};
+use crate::Color;
+use bitbit::{BitReader, MSB};
+use itertools::Itertools;
+use std::io;
+use std::iter::repeat;
+
+// There's a max of 4 green pixels out of every 6, so we need 512 slots for every line of 768 pixels (for example)
+// TODO: un-hardcode
+const STRIPE_WIDTH: usize = 768;
+// I think????
+const IMG_WIDTH: usize = 6048;
+const REQUIRED_CAPACITY: usize = STRIPE_WIDTH * 4 / 6;
+const NUM_LINES: usize = 673;
+
+pub fn inflate_stripe<T: io::Read>(reader: T, color_map: &DataGrid<Color>, output: &mut [u16]) {
+    let mut r: BitReader<_, MSB> = BitReader::new(reader);
+
+    let mut prev_lines = {
+        let zeros = vec![0u16; REQUIRED_CAPACITY];
+        Colored::new(
+            vec![zeros.clone(), zeros.clone()],
+            vec![zeros.clone(), zeros.clone()],
+            vec![zeros.clone(), zeros.clone()],
+        )
+    };
+
+    let mut gradients = ([[Grad::default(); 41]; 3], [[Grad::default(); 41]; 3]);
+
+    for line in 0..NUM_LINES {
+        let results = inflate_line(&mut r, &color_map, &mut gradients, &prev_lines);
+        prev_lines = collect_carry_lines(&results);
+        // TODO: extract this as a method.
+        for row_idx in 0..6 {
+            let (r, g, b) = results.split();
+            let line_colors = Colored::new(&r[row_idx / 2], &g[row_idx], &b[row_idx / 2]);
+            let start = STRIPE_WIDTH * (row_idx + line * 6);
+            let end = start + STRIPE_WIDTH;
+            let output = &mut output[start..end];
+            map_contiguous_colors_to_xtrans(
+                output,
+                &line_colors,
+                &color_map.subgrid(Position(0, row_idx), Size(6, 1)),
+            );
+        }
+    }
+}
+
+fn map_contiguous_colors_to_xtrans(
+    output_row: &mut [u16],
+    colors: &Colored<&Vec<u16>>,
+    row_color_map: &DataGrid<Color>,
+) {
+    for (_, x) in colors.iter() {
+        assert_eq!(x.len(), REQUIRED_CAPACITY);
+    }
+    assert_eq!(output_row.len(), STRIPE_WIDTH);
+    for (pos, val) in output_row.iter_mut().enumerate() {
+        // TODO: extract into a method, also used in map_xtrans_to_contiugous_colors
+        let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
+        let color = row_color_map.at(Position(pos, 0));
+        *val = colors[color][squashed_idx];
+    }
+}
+
+pub trait ValueTarget {
+    fn write_val(&mut self, value: u16);
+}
+
+fn inflate_line<R: io::Read>(
+    reader: &mut BitReader<R, MSB>,
+    color_map: &DataGrid<Color>,
+    gradients: &mut (Gradients, Gradients),
+    carry_results: &Colored<Vec<Vec<u16>>>,
+) -> Colored<Vec<Vec<u16>>> {
+    let mut colors = Colored::new(
+        vec![vec![UNSET; 512]; 3],
+        vec![vec![UNSET; 512]; 6],
+        vec![vec![UNSET; 512]; 3],
+    );
+    for (color_a, color_b, grad_set_idx) in &PROCESS {
+        let ca_even = repeat(color_a).zip((0..512).step_by(2));
+        let ca_odd = repeat(color_a).zip((0..512).skip(1).step_by(2));
+        let cb_even = repeat(color_b).zip((0..512).step_by(2));
+        let cb_odd = repeat(color_b).zip((0..512).skip(1).step_by(2));
+        // This starts processing the odd entries after the first 4 even entries are processed.
+        let zipped = zip_with_offset(ca_even.zip_eq(cb_even), 0, ca_odd.zip_eq(cb_odd), 4)
+            .map(|(a, b)| (flatten(a), flatten(b)));
+
+        for ((ca_even, cb_even), (ca_odd, cb_odd)) in zipped {
+            for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
+                if let Some(((color, row), idx)) = thing {
+                    let value = if is_interpolated(*color, *row, idx) {
+                        interpolate_value(&colors, &carry_results, *row, *color, idx)
+                    } else {
+                        compute_value_and_update_gradients(
+                            reader,
+                            &colors,
+                            gradients,
+                            &carry_results,
+                            *row,
+                            *color,
+                            idx,
+                            *grad_set_idx,
+                        )
+                    };
+                    colors[*color][*row][idx] = value;
+                }
+            }
+        }
+    }
+    colors
+}
+
+fn interpolate_value(
+    colors: &Colored<Vec<Vec<u16>>>,
+    carry_results: &Colored<Vec<Vec<u16>>>,
+    row_idx: usize,
+    color: Color,
+    idx: usize,
+) -> u16 {
+    assert_eq!(idx % 2, 0);
+    let carry_results = &carry_results[color];
+    let cdata = &colors[color];
+    let (rprevprev, rprev) = match row_idx {
+        0 => (carry_results[0].as_slice(), carry_results[1].as_slice()),
+        1 => (carry_results[1].as_slice(), cdata[0].as_slice()),
+        row => (cdata[row - 2].as_slice(), cdata[row - 1].as_slice()),
+    };
+    let ec = load_even_coefficients(rprev, rprevprev, idx);
+    let weighted_average = compute_weighted_average_even(ec);
+    weighted_average
+}
+
+fn compute_value_and_update_gradients<R: io::Read>(
+    reader: &mut BitReader<R, MSB>,
+    colors: &Colored<Vec<Vec<u16>>>,
+    gradients: &mut ([[Grad; 41]; 3], [[Grad; 41]; 3]),
+    carry_results: &Colored<Vec<Vec<u16>>>,
+    row_idx: usize,
+    color: Color,
+    idx: usize,
+    grad_set: usize,
+) -> u16 {
+    let is_even = idx % 2 == 0;
+    // Setup. Choose coefficients based on color / row etc
+    let carry_results = &carry_results[color];
+    let cdata = &colors[color];
+    let (even_gradients, odd_gradients) = gradients;
+    let (rprevprev, rprev) = match row_idx {
+        0 => (carry_results[0].as_slice(), carry_results[1].as_slice()),
+        1 => (carry_results[1].as_slice(), cdata[0].as_slice()),
+        row => (cdata[row - 2].as_slice(), cdata[row - 1].as_slice()),
+    };
+    // Computation is different based on whether the index is odd or even.
+    let (grad_set, (weighted_average, which_grad)) = if is_even {
+        (
+            &mut even_gradients[grad_set],
+            grad_and_weighted_avg_even(idx, rprevprev, rprev),
+        )
+    } else {
+        (
+            &mut odd_gradients[grad_set],
+            grad_and_weighted_avg_odd(idx, rprevprev, rprev, &cdata[row_idx]),
+        )
+    };
+    let grad = &mut grad_set[which_grad.abs() as usize];
+    let grad_instructs_subtraction = which_grad < 0;
+
+    let dec_bits = grad.bit_diff() as usize;
+
+    let sample = read_sample(reader, dec_bits).unwrap();
+
+    let delta = sample_to_delta(sample);
+    // Finally: update gradient.
+    let actual_value = if grad_instructs_subtraction {
+        (weighted_average as i32 - delta as i32)
+    } else {
+        (weighted_average as i32 + delta as i32)
+    };
+    grad.update_from_value(delta.abs());
+    assert!(actual_value < (1 << 14));
+    actual_value as u16
+}
+
+fn read_sample<T: io::Read>(
+    reader: &mut BitReader<T, MSB>,
+    lower_bits: usize,
+) -> io::Result<Sample> {
+    let upper = {
+        let mut count = 0;
+        while !reader.read_bit()? {
+            count += 1;
+        }
+        count
+    };
+
+    if upper > 40 {
+        let lower = reader.read_bits(13)?;
+        let invert = reader.read_bit()?;
+        // TODO: i've named this wrong or something. It's apparently "don't invert".
+        // Fix it in the EntireDelta type by naming it properly.
+        Ok(Sample::EntireDelta(lower as u16, !invert))
+    } else if lower_bits == 0 {
+        // TODO: not sure why this is true, but it is. There's a corresponding todo in the writer.
+        assert_eq!(upper, 0);
+        Ok(Sample::Zero)
+    } else {
+        // TODO: the story around dec_bits is a hot mess and needs to be fixed.
+        let lower_bits = lower_bits - 1;
+        let lower = reader.read_bits(lower_bits)?;
+        assert!(lower < (1 << 14));
+        let lower = lower as u16;
+        let invert = reader.read_bit()?;
+        Ok(Sample::SplitDelta {
+            upper,
+            lower,
+            lower_bits,
+            invert,
+        })
+    }
+}
+
+fn sample_to_delta(sample: Sample) -> i32 {
+    match sample {
+        Sample::Zero => 0,
+        Sample::EntireDelta(val, invert) => {
+            let val = val as i32 + 1;
+            if invert {
+                -val
+            } else {
+                val
+            }
+        }
+        Sample::SplitDelta {
+            upper,
+            lower,
+            lower_bits,
+            invert,
+        } => {
+            let val = (upper << lower_bits as u16) | lower;
+            let val = val as i32;
+            if invert {
+                -(val + 1)
+            } else {
+                val
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::fuji_compressed::inflate::{inflate_stripe, NUM_LINES, STRIPE_WIDTH};
+    use crate::fuji_compressed::process_common::UNSET;
+    use crate::util::datagrid::{DataGrid, Size};
+    use crate::Color::{Blue, Green, Red};
+    use itertools::Itertools;
+    use std::convert::TryInto;
+    use std::io::Cursor;
+
+    #[test]
+    fn end_to_end_stripe_inflate() {
+        const UNCOMPRESSED: &[u8] = include_bytes!("testdata/DSCF2279-block0.uncompressed.bin");
+        const COMPRESSED: &[u8] = include_bytes!("testdata/DSCF2279-block0.compressed.bin");
+
+        let expected = UNCOMPRESSED
+            .chunks_exact(2)
+            .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
+            .collect_vec();
+
+        let color_map = DataGrid::wrap(
+            &[
+                Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
+                Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green,
+                Red, Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
+            ],
+            Size(6, 6),
+        );
+        let mut actual = vec![UNSET; STRIPE_WIDTH * NUM_LINES * 6];
+
+        inflate_stripe(COMPRESSED, &color_map, &mut actual);
+        assert_eq!(actual.len(), expected.len());
+        assert_eq!(actual, expected.as_slice());
+    }
+}

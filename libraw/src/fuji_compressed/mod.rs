@@ -4,6 +4,9 @@
 mod bytecounter;
 mod compress;
 mod evenodd;
+mod inflate;
+mod process_common;
+mod sample;
 mod zip_with_offset;
 
 use nom::bytes::complete::take;
