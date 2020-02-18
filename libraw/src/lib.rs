@@ -208,7 +208,6 @@ impl RawFile {
             LibRaw_thumbnail_formats_LIBRAW_THUMBNAIL_JPEG => (),
             _ => panic!("Expected JPEG thumbnail format"),
         }
-        println!("size: {}", thumb.tlength);
 
         unsafe { slice::from_raw_parts(thumb.thumb as *const u8, thumb.tlength as usize) }
     }

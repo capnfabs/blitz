@@ -49,20 +49,17 @@ impl Default for Grad {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Sample {
-    // Just the 'upper' section.
-    JustUpper(u16, bool),
     // This represents the _entire delta_ between the weighted average and the
     // actual value. Use this when we're unable to use split-encoding because
     // we've got a large value of `upper`.
     // the second part of this tuple indicates whether the value should be
     // inverted, i.e. made negative.
-    EntireDelta(u16, bool),
+    EntireDelta(u16),
     // This is the default 'split encoding' mechanism.
     SplitDelta {
         upper: u16,
         lower: u16,
         lower_bits: usize,
-        invert: bool,
     },
 }
 

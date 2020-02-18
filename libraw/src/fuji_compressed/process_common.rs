@@ -220,3 +220,33 @@ pub fn grad_and_weighted_avg_odd(
         + q_value(oc.north_west as i32 - oc.west as i32);
     (weighted_average, which_grad)
 }
+
+/// Splits a value at `bit`, such that for return value `(a, b)`, `value == (a << bit | b)`.
+/// ```ignore
+/// let value = 0b110011_0101010101;
+/// let (a,b) = split_at(value, 10);
+/// assert_eq!(a, 0b110011);
+/// assert_eq!(b, 0b0101010101);
+/// ```
+pub fn split_at(value: u16, bit: u8) -> (u16, u16) {
+    let bit = bit as u16;
+    let split_mask = (1 << bit) - 1;
+    // 'sample' in libraw terminology
+    let upper = (value & (!split_mask)) >> bit;
+    let lower = value & split_mask;
+    (upper, lower)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::fuji_compressed::process_common::split_at;
+    use test_case::test_case;
+
+    #[test_case(0b110011_0101010101, 10 => (0b110011, 0b0101010101))]
+    #[test_case(0b1100110101010101, 0 => (0b1100110101010101, 0b0))]
+    #[test_case(0b1100110101010101, 16 => panics "overflow")]
+    #[test_case(0b1_100110101010101, 15 => (0b1, 0b100110101010101))]
+    fn bit_diff(value: u16, at: u8) -> (u16, u16) {
+        split_at(value, at)
+    }
+}

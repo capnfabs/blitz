@@ -1,9 +1,5 @@
-// Still WIP
-#![allow(unused_variables)]
-
 mod bytecounter;
 mod compress;
-mod evenodd;
 mod inflate;
 mod process_common;
 mod sample;
@@ -110,7 +106,6 @@ pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     let (i, blocks) = read_blocks(i, &block_sizes)?;
     println!("Compressed: {:#?}", header);
     println!("Blocks: {:#?}", block_sizes);
-    println!("block 1 first 20: {:?}", hex::encode(&blocks[1][0..20]));
     let blocks = blocks.iter().map(|x| Cursor::new(x));
     let output = inflate::inflate(blocks, &inflate::make_color_map());
     Ok((input, output))

@@ -3,7 +3,7 @@
 use crate::fuji_compressed::process_common::{
     collect_carry_lines, compute_weighted_average_even, flatten, grad_and_weighted_avg_even,
     grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, load_odd_coefficients,
-    PROCESS, UNSET,
+    split_at, PROCESS, UNSET,
 };
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
@@ -252,43 +252,23 @@ fn read_sample<T: io::Read>(
     };
 
     if upper > 40 {
-        let lower = reader.read_bits(13)?;
-        let invert = reader.read_bit()?;
-        // TODO: i've named this wrong or something. It's apparently "don't invert".
-        // Fix it in the EntireDelta type by naming it properly.
-        Ok(Sample::EntireDelta(lower as u16, !invert))
-    } else if lower_bits == 0 {
-        // TODO: I've probably named this wrong, see above
-        let invert = (upper & 0b1) != 0;
-        Ok(Sample::JustUpper(upper >> 1, invert))
+        let lower = reader.read_bits(14)?;
+        Ok(Sample::EntireDelta(lower as u16))
     } else {
-        // TODO: the story around dec_bits is a hot mess and needs to be fixed.
-        let lower_bits = lower_bits - 1;
-        let lower = reader.read_bits(lower_bits)?;
-        assert!(lower < (1 << 14));
-        let lower = lower as u16;
-        let invert = reader.read_bit()?;
+        let lower = reader.read_bits(lower_bits)? as u16;
         Ok(Sample::SplitDelta {
             upper,
             lower,
             lower_bits,
-            invert,
         })
     }
 }
 
 fn sample_to_delta(sample: Sample) -> i32 {
     match sample {
-        Sample::JustUpper(val, invert) => {
-            let val = val as i32;
-            if invert {
-                -(val + 1)
-            } else {
-                val
-            }
-        }
-        Sample::EntireDelta(val, invert) => {
-            let val = val as i32 + 1;
+        Sample::EntireDelta(val) => {
+            let invert = (val & 0b1) == 0;
+            let val = (val >> 1) as i32 + 1;
             if invert {
                 -val
             } else {
@@ -299,10 +279,11 @@ fn sample_to_delta(sample: Sample) -> i32 {
             upper,
             lower,
             lower_bits,
-            invert,
         } => {
             let val = (upper << lower_bits as u16) | lower;
+            let (val, invert) = split_at(val, 1);
             let val = val as i32;
+            let invert = invert != 0;
             if invert {
                 -(val + 1)
             } else {

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use crate::fuji_compressed::bytecounter::ByteCounter;
 use crate::fuji_compressed::process_common::{
     collect_carry_lines, compute_weighted_average_even, flatten, grad_and_weighted_avg_even,
-    grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, PROCESS, UNSET,
+    grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, split_at, PROCESS, UNSET,
 };
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
@@ -133,25 +133,21 @@ impl<'a, T: std::io::Write> BitOutputSampleTarget<'a, T> {
 impl<'a, T: std::io::Write> SampleTarget for BitOutputSampleTarget<'a, T> {
     fn write(&mut self, sample: Sample) -> io::Result<()> {
         match sample {
-            Sample::JustUpper(val, invert) => {
-                self.write_zeros_and_one((val << 1 & invert as u16) as usize)
-            }
-            Sample::EntireDelta(val, invert) => {
+            Sample::EntireDelta(val) => {
                 self.write_zeros_and_one(41)?;
-                self.writer.write_bits(val as u32, 13)?;
-                self.writer.write_bit(invert)
+                self.writer.write_bits(val as u32, 14)?;
+                Ok(())
             }
             Sample::SplitDelta {
                 upper,
                 lower,
                 lower_bits,
-                invert,
             } => {
                 self.write_zeros_and_one(upper as usize)?;
                 if lower_bits != 0 {
                     self.writer.write_bits(lower as u32, lower_bits)?;
                 }
-                self.writer.write_bit(invert)
+                Ok(())
             }
         }
     }
@@ -283,8 +279,6 @@ fn make_sample(
     let delta = actual_value as i32 - weighted_average as i32;
     grad.update_from_value(delta.abs());
 
-    println!("{:?}[{}][{}]: {:?}", color, row_idx, idx, sample);
-
     sample
 }
 
@@ -297,43 +291,29 @@ fn compute_sample(
 ) -> Sample {
     let delta = actual_value as i32 - weighted_average as i32;
     let abs_delta = delta.abs() as u16;
-    let dec_bits = grad.bit_diff() as u16;
-    let mask_dec_bits = dec_bits.saturating_sub(1);
-    let split_mask = (1 << mask_dec_bits) - 1;
-    // 'sample' in libraw terminology
-    let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
-    let lower = abs_delta & split_mask;
+    let total_base2_bits = grad.bit_diff() as u8;
+    let mask_dec_bits = total_base2_bits.saturating_sub(1);
+    let (upper, _) = split_at(abs_delta, mask_dec_bits);
 
     // Here's the bit where we decide how to encode the sample.
     // TODO: we can probably change this structure such that it accepts some
     // input parameters and then decides on the encoding later. Could be useful
     // for making it clearer how this encoding process works?
     if upper > 40 {
-        Sample::EntireDelta(abs_delta - 1, (delta < 0) == grad_instructs_subtraction)
-    } else if dec_bits == 0 {
-        // TODO: how does this work / why is it true?
-        // If dec_bits is zero, delta is always zero, but it's not true in
-        // reverse.
-        Sample::JustUpper(upper, (delta < 0) == grad_instructs_subtraction)
-    } else if delta == 0 || (delta < 0) == grad_instructs_subtraction {
-        Sample::SplitDelta {
-            upper,
-            lower,
-            lower_bits: mask_dec_bits as usize,
-            invert: false,
-        }
+        let val = ((abs_delta - 1) << 1) | ((delta < 0) == grad_instructs_subtraction) as u16;
+        Sample::EntireDelta(val)
     } else {
-        // We're guaranteed this is non-zero by previous branch.
-        // Subtract one and re-split.
-        let abs_delta = abs_delta - 1;
-        let upper = (abs_delta & (!split_mask)) >> mask_dec_bits;
-        let lower = abs_delta & split_mask;
-
+        let invert = delta != 0 && (delta < 0) != grad_instructs_subtraction;
+        let encoding = if invert {
+            (abs_delta - 1) << 1 | 0b1
+        } else {
+            abs_delta << 1 | 0b0
+        };
+        let (upper, lower) = split_at(encoding, total_base2_bits);
         Sample::SplitDelta {
             upper,
             lower,
-            lower_bits: mask_dec_bits as usize,
-            invert: true,
+            lower_bits: total_base2_bits as usize,
         }
     }
 }
