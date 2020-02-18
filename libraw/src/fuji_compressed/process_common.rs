@@ -1,6 +1,5 @@
 use crate::util::colored::Colored;
 use crate::Color;
-use itertools::Itertools;
 
 // We need to pass some of the lines from previous lines to future lines, because they're used in calculations.
 // For now, we clone them. It would be entirely possible to make that _not_ the case, but I couldn't be bothered
@@ -87,18 +86,20 @@ pub struct EvenCoefficients {
 // fuji code. My guess is we can get better compression ratios by doing something different, but I don't know!
 pub fn compute_weighted_average_even(ec: EvenCoefficients) -> u16 {
     let distance = |v: u16| (v as i32 - ec.north as i32).abs();
-    let others = [ec.northwest, ec.northeast, ec.very_north]
-        .iter()
-        .copied()
-        .sorted_by_key(|x| distance(*x))
-        .collect_vec();
 
-    if distance(ec.northwest) == distance(ec.northeast) {
-        let val = (ec.northwest + ec.northeast + 2 * ec.north) / 4;
-        return val;
-    }
+    let (other_a, other_b) = if distance(ec.northwest) > distance(ec.very_north)
+        && distance(ec.northwest) > distance(ec.northeast)
+    {
+        (ec.very_north, ec.northeast)
+    } else if distance(ec.northeast) > distance(ec.northwest)
+        && distance(ec.northeast) > distance(ec.very_north)
+    {
+        (ec.northwest, ec.very_north)
+    } else {
+        (ec.northwest, ec.northeast)
+    };
 
-    (others[0] + others[1] + 2 * ec.north) / 4
+    (other_a + other_b + 2 * ec.north) / 4
 }
 
 pub fn compute_weighted_average_odd(oc: OddCoefficients) -> u16 {
