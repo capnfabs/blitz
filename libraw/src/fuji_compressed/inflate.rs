@@ -7,11 +7,11 @@ use crate::fuji_compressed::process_common::{
 };
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
+use crate::util::bitreader::BitReader;
 use crate::util::colored::Colored;
 use crate::util::datagrid::{DataGrid, MutableDataGrid, Offset, Position, Size};
 use crate::Color;
 use crate::Color::{Blue, Green, Red};
-use bitbit::{BitReader, MSB};
 use itertools::{zip, Itertools};
 use std::io;
 use std::io::SeekFrom;
@@ -66,7 +66,7 @@ pub fn inflate_stripe(
     stripe_width: usize,
     output: &mut MutableDataGrid<u16>,
 ) {
-    let mut r: BitReader<_, MSB> = BitReader::new(reader);
+    let mut r: BitReader<_> = BitReader::new(reader);
 
     // As per Xtrans matrix, there's a max of 4 green pixels out of every 6, so
     // we need 512 slots for every line of 768 pixels (for example)
@@ -131,7 +131,7 @@ pub trait ValueTarget {
 }
 
 fn inflate_line<R: io::Read>(
-    reader: &mut BitReader<R, MSB>,
+    reader: &mut BitReader<R>,
     color_map: &DataGrid<Color>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
@@ -197,7 +197,7 @@ fn interpolate_value(
 }
 
 fn compute_value_and_update_gradients<R: io::Read>(
-    reader: &mut BitReader<R, MSB>,
+    reader: &mut BitReader<R>,
     colors: &Colored<Vec<Vec<u16>>>,
     gradients: &mut ([[Grad; 41]; 3], [[Grad; 41]; 3]),
     carry_results: &Colored<Vec<Vec<u16>>>,
@@ -251,25 +251,20 @@ fn compute_value_and_update_gradients<R: io::Read>(
     actual_value.rem_euclid(1 << 14) as u16
 }
 
-fn read_sample<T: io::Read>(
-    reader: &mut BitReader<T, MSB>,
-    lower_bits: usize,
-) -> io::Result<Sample> {
-    let upper = {
-        let mut count = 0;
-        while !reader.read_bit()? {
-            count += 1;
-        }
-        count
-    };
+fn read_sample<T: io::Read>(reader: &mut BitReader<T>, lower_bits: usize) -> io::Result<Sample> {
+    let upper = reader.count_continuous_0s();
+    // Read off the 1
+    reader.read_bits(1);
+
+    //println!("Byte count == {}", reader.total_read());
 
     if upper > 40 {
-        let lower = reader.read_bits(14)?;
+        let lower = reader.read_bits(14);
         Ok(Sample::EntireDelta(lower as u16))
     } else {
-        let lower = reader.read_bits(lower_bits)? as u16;
+        let lower = reader.read_bits(lower_bits) as u16;
         Ok(Sample::SplitDelta {
-            upper,
+            upper: upper as u16,
             lower,
             lower_bits,
         })

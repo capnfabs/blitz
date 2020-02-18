@@ -1,5 +1,6 @@
 use std::io;
 
+// TODO: move to util submodule.
 pub struct ByteCounter<W> {
     inner: W,
     count: usize,
