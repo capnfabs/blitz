@@ -5,7 +5,6 @@ mod process_common;
 mod sample;
 mod zip_with_offset;
 
-use hex;
 use nom::bytes::complete::take;
 use nom::bytes::streaming::tag;
 use nom::combinator::map;
@@ -14,6 +13,7 @@ use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::sequence::tuple;
 use nom::IResult;
 
+use crate::util::datagrid::Size;
 pub use compress::compress;
 use std::io::Cursor;
 
@@ -30,7 +30,7 @@ struct FujiCompressedHeader {
     raw_rounded_width: u16,
     // Width of the actual image from the sensor, excluding the extra rounding for block processing. Always <= raw_rounded_width.
     raw_width: u16,
-    // The width of each block.
+    // The width of each block / stripe
     // fuji_block_width / block_size depending on location in Libraw
     block_width: u16,
     // The number of blocks. They're all arranged side-by-side. h_blocks_in_row
@@ -103,10 +103,16 @@ pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     let (i, header) = parse_fuji_header(i)?;
     // TODO: build quantisation tables
     let (i, block_sizes) = block_sizes(i, header.num_blocks)?;
-    let (i, blocks) = read_blocks(i, &block_sizes)?;
+    let (_i, blocks) = read_blocks(i, &block_sizes)?;
     println!("Compressed: {:#?}", header);
     println!("Blocks: {:#?}", block_sizes);
     let blocks = blocks.iter().map(|x| Cursor::new(x));
-    let output = inflate::inflate(blocks, &inflate::make_color_map());
+    let img_size = Size(header.raw_width as usize, header.raw_height as usize);
+    let output = inflate::inflate(
+        img_size,
+        header.block_width as usize,
+        blocks,
+        &inflate::make_color_map(),
+    );
     Ok((input, output))
 }
