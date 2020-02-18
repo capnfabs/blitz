@@ -21,7 +21,6 @@ use std::process::Output;
 // There's a max of 4 green pixels out of every 6, so we need 512 slots for every line of 768 pixels (for example)
 // TODO: un-hardcode
 const STRIPE_WIDTH: usize = 768;
-// I think????
 const IMG_WIDTH: usize = 6048;
 const REQUIRED_CAPACITY: usize = STRIPE_WIDTH * 4 / 6;
 const NUM_LINES: usize = 673;
@@ -49,9 +48,6 @@ pub fn inflate(
     let mut output = vec![0; IMG_WIDTH * IMG_HEIGHT];
     let mut mg = MutableDataGrid::new(&mut output, Size(IMG_WIDTH, IMG_HEIGHT));
     for (stripe_num, block) in (0..num_stripes).zip(blocks) {
-        if stripe_num == 7 {
-            continue;
-        }
         let stripe_start = stripe_num * STRIPE_WIDTH;
         let stripe_end = stripe_start + STRIPE_WIDTH;
         let mut stripe_grid = if stripe_end < IMG_WIDTH {
@@ -62,9 +58,7 @@ pub fn inflate(
                 Size(IMG_WIDTH - stripe_start, IMG_HEIGHT),
             )
         };
-        println!("Starting stripe {}", stripe_num);
         inflate_stripe(block, color_map, &mut stripe_grid);
-        println!("Finished stripe {}", stripe_num);
     }
     output
 }
@@ -186,6 +180,7 @@ fn interpolate_value(
     };
     let ec = load_even_coefficients(rprev, rprevprev, idx);
     let weighted_average = compute_weighted_average_even(ec);
+    assert!(weighted_average < (1 << 14));
     weighted_average
 }
 
@@ -240,21 +235,8 @@ fn compute_value_and_update_gradients<R: io::Read>(
 
     grad.update_from_value(delta.abs());
 
-    /*
-    println!(
-        "{}{}[{}]: ref: {}, actual: {}, grad_neg: {}, grad_before: {:?}, grad_after: {:?}",
-        color.letter(),
-        row_idx,
-        idx,
-        weighted_average,
-        actual_value,
-        grad_instructs_subtraction as u8,
-        old_grad,
-        grad,
-    );*/
-
-    assert!(actual_value < (1 << 14));
-    actual_value as u16
+    // huh, this is actually necessary.
+    actual_value.rem_euclid(1 << 14) as u16
 }
 
 fn read_sample<T: io::Read>(
