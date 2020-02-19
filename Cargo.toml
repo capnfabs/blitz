@@ -4,3 +4,6 @@ members = [
     "blitz",
     "libraw",
 ]
+
+[profile.release]
+debug = true

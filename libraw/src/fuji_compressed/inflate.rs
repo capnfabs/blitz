@@ -34,6 +34,7 @@ pub fn inflate(
 ) -> Vec<u16> {
     let Size(img_width, img_height) = img_size;
     let num_stripes = (img_width as f32 / stripe_width as f32).ceil() as usize;
+    // Output image, should be 6000x4000x
     let mut output = vec![0; img_width * img_height];
     let mut mg = MutableDataGrid::new(&mut output, img_size);
     for (stripe_num, block) in (0..num_stripes).zip(blocks) {

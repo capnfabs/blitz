@@ -1,10 +1,11 @@
 use std::cmp::min;
 use std::io;
+use std::mem::size_of;
 
 pub struct BitReader<T: io::Read> {
     reader: T,
-    buffer: u32,
-    offset: u32,
+    buffer: usize,
+    offset: usize,
     total_read: usize,
 }
 
@@ -16,23 +17,25 @@ fn eof<T>() -> io::Result<T> {
     ))
 }
 
+const BUFFER_BYTES: usize = size_of::<usize>();
+const BUFFER_BITS: usize = BUFFER_BYTES * 8;
+
 impl<T: io::Read> BitReader<T> {
     pub fn new(reader: T) -> Self {
         BitReader {
             reader,
             buffer: 0,
-            offset: 32,
+            offset: BUFFER_BITS,
             total_read: 0,
         }
     }
 
     /// Returns true if the buffer has content in it after the method call, false if it's EOF.
-    #[inline]
     fn ensure_buffer_filled(&mut self) -> io::Result<bool> {
-        if self.offset != 32 {
+        if self.offset != BUFFER_BITS {
             return Ok(true);
         }
-        let mut buf = [0u8; 4];
+        let mut buf = [0u8; BUFFER_BYTES];
         let count = self.reader.read(&mut buf)?;
 
         if count == 0 {
@@ -44,8 +47,8 @@ impl<T: io::Read> BitReader<T> {
         // If we didn't manage to fill the buffer completely, then right-align bytes
         // in the buffer so that we're not making up bits at the end of the stream.
         let bits_read = count * 8;
-        let new_offset = (32 - bits_read) as u32;
-        let num = u32::from_be_bytes(buf);
+        let new_offset = BUFFER_BITS - bits_read;
+        let num = usize::from_be_bytes(buf);
         self.buffer = num >> new_offset;
         self.offset = new_offset;
         Ok(true)
@@ -56,18 +59,18 @@ impl<T: io::Read> BitReader<T> {
     }
 
     pub fn count_continuous_0s(&mut self) -> io::Result<u32> {
-        let mut counted_0s_total = 0;
+        let mut counted_0s_total: u32 = 0;
         loop {
             if !self.ensure_buffer_filled()? {
                 return eof();
             }
             let counted_this_loop =
                 (self.buffer << self.offset | ((1 << self.offset) - 1)).leading_zeros();
-            self.offset += counted_this_loop;
+            self.offset += counted_this_loop as usize;
             counted_0s_total += counted_this_loop;
             // Didn't read to end of buffer, which means we have enough info
             // and we don't need to check the next byte.
-            if self.offset < 32 {
+            if self.offset < BUFFER_BITS {
                 return Ok(counted_0s_total);
             }
         }
@@ -80,11 +83,11 @@ impl<T: io::Read> BitReader<T> {
                 return eof();
             }
             let counted_this_loop = (!(self.buffer << self.offset)).leading_zeros();
-            self.offset += counted_this_loop;
+            self.offset += counted_this_loop as usize;
             counted_1s_total += counted_this_loop;
             // Didn't read to end of buffer, which means we have enough info
             // and we don't need to check the next byte.
-            if self.offset < 32 {
+            if self.offset < BUFFER_BITS {
                 return Ok(counted_1s_total);
             }
         }
@@ -92,8 +95,7 @@ impl<T: io::Read> BitReader<T> {
 
     pub fn read_bits(&mut self, count: usize) -> io::Result<u32> {
         // not sure how it works at the margin yet
-        assert!(count < 30);
-        let count = count as u32;
+        assert!(count <= 30);
         if count == 0 {
             return Ok(0);
         }
@@ -103,7 +105,7 @@ impl<T: io::Read> BitReader<T> {
             if !self.ensure_buffer_filled()? {
                 return eof();
             }
-            let bits_available = 32 - self.offset;
+            let bits_available = BUFFER_BITS - self.offset;
             let bits_to_read_this_buffer = min(bits_available, bits_remaining);
             let bit_mask = (1 << bits_to_read_this_buffer) - 1;
             let right_shift = bits_available.saturating_sub(bits_to_read_this_buffer);
@@ -116,7 +118,7 @@ impl<T: io::Read> BitReader<T> {
                 break;
             }
         }
-        Ok(value)
+        Ok(value as u32)
     }
 }
 
@@ -148,17 +150,21 @@ mod test {
 
     #[test]
     fn read_bits_test_end() {
-        let data: Vec<u8> = hex::decode("777562").unwrap();
+        let data: Vec<u8> = hex::decode("00000000777562").unwrap();
         let mut reader = BitReader::new(data.as_slice());
         let mut rb = |count| reader.read_bits(count).unwrap();
+        assert_eq!(rb(30), 0x0);
+        assert_eq!(rb(2), 0x0);
         assert_eq!(rb(12), 0x777);
         assert_eq!(rb(12), 0x562);
     }
 
     #[test]
     fn count_continuous_1s() -> Result<()> {
-        let data: Vec<u8> = hex::decode("FFF0100FF800").unwrap();
+        let data: Vec<u8> = hex::decode("00000000FFF0100FF800").unwrap();
         let mut reader = BitReader::new(data.as_slice());
+        assert_eq!(reader.read_bits(30)?, 0x0);
+        assert_eq!(reader.read_bits(2)?, 0x0);
         assert_eq!(reader.count_continuous_1s()?, 12);
         for _ in 0..100 {
             // Shouldn't increment the counter, so should be able to do this
