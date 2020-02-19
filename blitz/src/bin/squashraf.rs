@@ -1,8 +1,7 @@
 use clap::{App, Arg};
-use itertools::Itertools;
 use libraw::fuji_compressed;
-use libraw::RawFile;
 
+use libraw::raf::RafFile;
 use libraw::util::datagrid::{DataGrid, Size};
 use std::io::Cursor;
 
@@ -18,23 +17,16 @@ fn main() {
 
 fn squash_raf(img_file: &str) {
     println!("Loading RAW data: libraw");
-    let file = RawFile::open(img_file).unwrap();
+    let file = RafFile::open(img_file).unwrap();
+    let file = file.parse_raw().unwrap();
+    let render_info = file.render_info();
     println!("Opened file: {:?}", file);
 
     let img_grid = DataGrid::wrap(
-        file.raw_data(),
-        Size(
-            file.img_params().raw_width as usize,
-            file.img_params().raw_height as usize,
-        ),
+        render_info.raw_data,
+        Size(render_info.width as usize, render_info.height as usize),
     );
-    let xtmap = file
-        .xtrans_pixel_mapping()
-        .iter()
-        .flatten()
-        .copied()
-        .collect_vec();
-    let cm = DataGrid::wrap(&xtmap, Size(6, 6));
+    let cm = DataGrid::wrap(&render_info.xtrans_mapping, Size(6, 6));
 
     // This is where we're going to write the output to.
     let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
