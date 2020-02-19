@@ -16,11 +16,12 @@ impl<T: io::Read> BitReader<T> {
             offset: 32,
             total_read: 0,
         };
-        br.fill_buffer();
+        br.ensure_buffer_filled();
         br
     }
 
-    fn fill_buffer(&mut self) {
+    #[inline]
+    fn ensure_buffer_filled(&mut self) {
         if self.offset != 32 {
             return;
         }
@@ -48,7 +49,7 @@ impl<T: io::Read> BitReader<T> {
     }
 
     pub fn count_continuous_0s(&mut self) -> u32 {
-        self.fill_buffer();
+        self.ensure_buffer_filled();
         let counted_0_bits =
             (self.buffer << self.offset | ((1 << self.offset) - 1)).leading_zeros();
         self.offset += counted_0_bits;
@@ -62,7 +63,7 @@ impl<T: io::Read> BitReader<T> {
     }
 
     pub fn count_continuous_1s(&mut self) -> u32 {
-        self.fill_buffer();
+        self.ensure_buffer_filled();
         let counted_1_bits = (!(self.buffer << self.offset)).leading_zeros();
         self.offset += counted_1_bits;
         if self.offset == 32 {
@@ -78,7 +79,7 @@ impl<T: io::Read> BitReader<T> {
         if count == 0 {
             return 0;
         }
-        self.fill_buffer();
+        self.ensure_buffer_filled();
         // not sure how it works at the margin yet
         assert!(count < 30);
         let count = count as u32;
