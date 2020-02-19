@@ -1,22 +1,18 @@
-#![allow(unused)]
-
 use crate::fuji_compressed::process_common::{
     collect_carry_lines, compute_weighted_average_even, flatten, grad_and_weighted_avg_even,
-    grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, load_odd_coefficients,
-    split_at, PROCESS, UNSET,
+    grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, split_at, PROCESS, UNSET,
 };
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
 use crate::util::bitreader::BitReader;
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, MutableDataGrid, Offset, Position, Size};
+use crate::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
 use crate::Color;
 use crate::Color::{Blue, Green, Red};
-use itertools::{zip, Itertools};
+use itertools::Itertools;
 use std::io;
-use std::io::SeekFrom;
+
 use std::iter::repeat;
-use std::process::Output;
 
 // TODO: this should be moved to a testing utilities file.
 pub fn make_color_map() -> DataGrid<'static, Color> {
@@ -87,7 +83,7 @@ pub fn inflate_stripe(
     let num_lines = stripe_height / 6;
 
     for line in 0..num_lines {
-        let results = inflate_line(&mut r, &color_map, &mut gradients, &prev_lines);
+        let results = inflate_line(&mut r, &mut gradients, &prev_lines);
         prev_lines = collect_carry_lines(&results);
         copy_line_to_xtrans(
             &color_map,
@@ -132,7 +128,6 @@ pub trait ValueTarget {
 
 fn inflate_line<R: io::Read>(
     reader: &mut BitReader<R>,
-    color_map: &DataGrid<Color>,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
 ) -> Colored<Vec<Vec<u16>>> {
@@ -243,8 +238,6 @@ fn compute_value_and_update_gradients<R: io::Read>(
         (weighted_average as i32 + delta as i32)
     };
 
-    let old_grad = grad.clone();
-
     grad.update_from_value(delta.abs());
 
     // huh, this is actually necessary.
@@ -255,8 +248,6 @@ fn read_sample<T: io::Read>(reader: &mut BitReader<T>, lower_bits: usize) -> io:
     let upper = reader.count_continuous_0s();
     // Read off the 1
     reader.read_bits(1);
-
-    //println!("Byte count == {}", reader.total_read());
 
     if upper > 40 {
         let lower = reader.read_bits(14);
@@ -304,11 +295,10 @@ fn sample_to_delta(sample: Sample) -> i32 {
 mod test {
     use crate::fuji_compressed::inflate::{inflate_stripe, make_color_map};
     use crate::fuji_compressed::process_common::UNSET;
-    use crate::util::datagrid::{DataGrid, MutableDataGrid, Size};
-    use crate::Color::{Blue, Green, Red};
+    use crate::util::datagrid::{MutableDataGrid, Size};
+
     use itertools::Itertools;
     use std::convert::TryInto;
-    use std::io::Cursor;
 
     const STRIPE_WIDTH: usize = 768;
     const NUM_LINES: usize = 673;
