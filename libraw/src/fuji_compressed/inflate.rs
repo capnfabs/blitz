@@ -245,15 +245,15 @@ fn compute_value_and_update_gradients<R: io::Read>(
 }
 
 fn read_sample<T: io::Read>(reader: &mut BitReader<T>, lower_bits: usize) -> io::Result<Sample> {
-    let upper = reader.count_continuous_0s();
+    let upper = reader.count_continuous_0s()?;
     // Read off the 1
-    reader.read_bits(1);
+    reader.read_bits(1)?;
 
     if upper > 40 {
-        let lower = reader.read_bits(14);
+        let lower = reader.read_bits(14)?;
         Ok(Sample::EntireDelta(lower as u16))
     } else {
-        let lower = reader.read_bits(lower_bits) as u16;
+        let lower = reader.read_bits(lower_bits)? as u16;
         Ok(Sample::SplitDelta {
             upper: upper as u16,
             lower,
