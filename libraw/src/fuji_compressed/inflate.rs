@@ -247,8 +247,6 @@ fn compute_value_and_update_gradients<R: io::Read>(
 
 fn read_sample<T: io::Read>(reader: &mut BitReader<T>, lower_bits: usize) -> io::Result<Sample> {
     let upper = reader.count_continuous_0s()?;
-    // Read off the 1
-    reader.read_bits(1)?;
 
     if upper > 40 {
         let lower = reader.read_bits(14)?;

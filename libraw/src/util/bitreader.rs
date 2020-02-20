@@ -20,6 +20,40 @@ fn eof<T>() -> io::Result<T> {
 const BUFFER_BYTES: usize = size_of::<usize>();
 const BUFFER_BITS: usize = BUFFER_BYTES * 8;
 
+const BIT_MASK: [usize; 31] = [
+    (1 << 0) - 1,
+    (1 << 1) - 1,
+    (1 << 2) - 1,
+    (1 << 3) - 1,
+    (1 << 4) - 1,
+    (1 << 5) - 1,
+    (1 << 6) - 1,
+    (1 << 7) - 1,
+    (1 << 8) - 1,
+    (1 << 9) - 1,
+    (1 << 10) - 1,
+    (1 << 11) - 1,
+    (1 << 12) - 1,
+    (1 << 13) - 1,
+    (1 << 14) - 1,
+    (1 << 15) - 1,
+    (1 << 16) - 1,
+    (1 << 17) - 1,
+    (1 << 18) - 1,
+    (1 << 19) - 1,
+    (1 << 20) - 1,
+    (1 << 21) - 1,
+    (1 << 22) - 1,
+    (1 << 23) - 1,
+    (1 << 24) - 1,
+    (1 << 25) - 1,
+    (1 << 26) - 1,
+    (1 << 27) - 1,
+    (1 << 28) - 1,
+    (1 << 29) - 1,
+    (1 << 30) - 1,
+];
+
 impl<T: io::Read> BitReader<T> {
     pub fn new(reader: T) -> Self {
         BitReader {
@@ -31,6 +65,7 @@ impl<T: io::Read> BitReader<T> {
     }
 
     /// Returns true if the buffer has content in it after the method call, false if it's EOF.
+    #[inline(always)]
     fn ensure_buffer_filled(&mut self) -> io::Result<bool> {
         if self.offset != BUFFER_BITS {
             return Ok(true);
@@ -58,6 +93,7 @@ impl<T: io::Read> BitReader<T> {
         self.total_read
     }
 
+    // This *also* reads off the 1 after the zeros.
     pub fn count_continuous_0s(&mut self) -> io::Result<u32> {
         let mut counted_0s_total: u32 = 0;
         loop {
@@ -71,11 +107,14 @@ impl<T: io::Read> BitReader<T> {
             // Didn't read to end of buffer, which means we have enough info
             // and we don't need to check the next byte.
             if self.offset < BUFFER_BITS {
+                // Skip the terminating '1'
+                self.offset += 1;
                 return Ok(counted_0s_total);
             }
         }
     }
 
+    // This also reads off the 0 after the 1s!
     pub fn count_continuous_1s(&mut self) -> io::Result<u32> {
         let mut counted_1s_total = 0;
         loop {
@@ -88,6 +127,8 @@ impl<T: io::Read> BitReader<T> {
             // Didn't read to end of buffer, which means we have enough info
             // and we don't need to check the next byte.
             if self.offset < BUFFER_BITS {
+                // Skip the terminating '0'
+                self.offset += 1;
                 return Ok(counted_1s_total);
             }
         }
@@ -95,7 +136,7 @@ impl<T: io::Read> BitReader<T> {
 
     pub fn read_bits(&mut self, count: usize) -> io::Result<u32> {
         // not sure how it works at the margin yet
-        assert!(count <= 30);
+        debug_assert!(count <= 30);
         if count == 0 {
             return Ok(0);
         }
@@ -107,7 +148,7 @@ impl<T: io::Read> BitReader<T> {
             }
             let bits_available = BUFFER_BITS - self.offset;
             let bits_to_read_this_buffer = min(bits_available, bits_remaining);
-            let bit_mask = (1 << bits_to_read_this_buffer) - 1;
+            let bit_mask = BIT_MASK[bits_to_read_this_buffer];
             let right_shift = bits_available.saturating_sub(bits_to_read_this_buffer);
             value <<= bits_to_read_this_buffer;
             let from_this_buffer = (self.buffer >> right_shift) & bit_mask;
@@ -166,18 +207,13 @@ mod test {
         assert_eq!(reader.read_bits(30)?, 0x0);
         assert_eq!(reader.read_bits(2)?, 0x0);
         assert_eq!(reader.count_continuous_1s()?, 12);
-        for _ in 0..100 {
-            // Shouldn't increment the counter, so should be able to do this
-            // infinitely
-            assert_eq!(reader.count_continuous_1s()?, 0);
-        }
-        assert_eq!(reader.read_bits(7)?, 0x00);
+        assert_eq!(reader.read_bits(6)?, 0x00);
         assert_eq!(reader.count_continuous_1s()?, 1);
-        assert_eq!(reader.read_bits(8)?, 0x00);
+        assert_eq!(reader.read_bits(7)?, 0x00);
         // This crosses the 32-bit boundary, should be 4 before + 5 after
         assert_eq!(reader.count_continuous_1s()?, 9);
         // The last 11 bytes should be zeros
-        assert_eq!(reader.read_bits(11).unwrap(), 0);
+        assert_eq!(reader.read_bits(10).unwrap(), 0);
         Ok(())
     }
 
@@ -186,26 +222,25 @@ mod test {
         let data: Vec<u8> = hex::decode("03FFF0E00FF800").unwrap();
         let mut reader = BitReader::new(data.as_slice());
         assert_eq!(reader.count_continuous_0s()?, 6);
-        assert_eq!(reader.count_continuous_1s()?, 14);
-        assert_eq!(reader.count_continuous_0s()?, 4);
-        assert_eq!(reader.count_continuous_1s()?, 3);
+        assert_eq!(reader.count_continuous_1s()?, 13);
+        assert_eq!(reader.count_continuous_0s()?, 3);
+        assert_eq!(reader.count_continuous_1s()?, 2);
         // This one crosses boundaries
-        assert_eq!(reader.count_continuous_0s()?, 9);
-        assert_eq!(reader.read_bits(9)?, 0x1FF);
-        // TODO: can't handle situations where we're at the end of file yet.
-        //assert_eq!(reader.count_continuous_0s(), 11);
-        // That's the end!
+        assert_eq!(reader.count_continuous_0s()?, 8);
+        assert_eq!(reader.read_bits(8)?, 0xFF);
+        // TODO: test for end of file
         Ok(())
     }
 
     #[test]
     fn count_41_0s_across_3_bytes() -> Result<()> {
-        let data: Vec<u8> = hex::decode("FFFFFFF00000000007").unwrap();
+        let data: Vec<u8> = hex::decode("FFFFFFE00000000007").unwrap();
         let mut reader = BitReader::new(data.as_slice());
 
-        assert_eq!(reader.count_continuous_1s()?, 28);
+        assert_eq!(reader.count_continuous_1s()?, 27);
+        // There's a zero read off from the previous thing
         assert_eq!(reader.count_continuous_0s()?, 41);
-        assert_eq!(reader.read_bits(3)?, 0x7);
+        assert_eq!(reader.read_bits(2)?, 0x3);
         Ok(())
     }
 }
