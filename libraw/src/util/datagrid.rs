@@ -1,3 +1,4 @@
+use nom::lib::std::slice::from_raw_parts_mut;
 use std::ops::{Index, IndexMut};
 
 type X = usize;
@@ -142,7 +143,10 @@ impl<'a, T: Copy> Iterator for DataGridIterator<'a, T> {
 }
 
 // TODO: unify everything into MutableDataGrid if it's possible, and add a 'wrapping' datagrid which is the same but supports wrapping for reads.
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct MutableDataGrid<'a, T: Copy> {
+    #[derivative(Debug = "ignore")]
     data: &'a mut [T],
     data_size: Size,
     size: Size,
@@ -201,6 +205,40 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
         let Size(data_width, _) = self.data_size;
         let start = data_y * data_width + data_x;
         &mut self.data[start..start + row_width]
+    }
+
+    pub fn vertical_stripes_mut(&mut self, width: X) -> Vec<MutableDataGrid<T>> {
+        let count_whole_stripes = self.size.0 / width;
+        let last_width = self.size.0 % width;
+
+        let mut stripes = vec![];
+
+        for stripe_num in 0..count_whole_stripes {
+            let data_copy = unsafe { from_raw_parts_mut(self.data.as_mut_ptr(), self.data.len()) };
+            let grid = MutableDataGrid {
+                data: data_copy,
+                data_size: self.data_size,
+                anchor_pos: Position(stripe_num * width, 0).extending(self.anchor_pos),
+                size: Size(width, self.size.1),
+            };
+            println!("{:?}", grid);
+            stripes.push(grid)
+        }
+
+        if last_width != 0 {
+            let data_copy = unsafe { from_raw_parts_mut(self.data.as_mut_ptr(), self.data.len()) };
+            let x_offset = width * count_whole_stripes;
+            let grid = MutableDataGrid {
+                data: data_copy,
+                data_size: self.data_size,
+                anchor_pos: Position(x_offset, 0).extending(self.anchor_pos),
+                size: Size(last_width, self.size.1),
+            };
+            println!("{:?}", grid);
+            stripes.push(grid);
+        }
+
+        stripes
     }
 
     pub fn size(&self) -> Size {

@@ -26,36 +26,32 @@ pub fn make_color_map() -> DataGrid<'static, Color> {
     )
 }
 
-pub fn inflate(
+pub fn inflate<'a, T>(
     img_size: Size,
     stripe_width: usize,
-    blocks: impl Iterator<Item = impl io::Read>,
+    blocks: impl Iterator<Item = T>,
     color_map: &DataGrid<Color>,
-) -> Vec<u16> {
+) -> Vec<u16>
+where
+    T: io::Read,
+{
     let Size(img_width, img_height) = img_size;
-    let num_stripes = (img_width as f32 / stripe_width as f32).ceil() as usize;
     // Output image, should be 6000x4000x
     let mut output = vec![0; img_width * img_height];
     let mut mg = MutableDataGrid::new(&mut output, img_size);
-    for (stripe_num, block) in (0..num_stripes).zip(blocks) {
-        let stripe_start = stripe_num * stripe_width;
-        let stripe_end = stripe_start + stripe_width;
-        let mut stripe_grid = if stripe_end < img_width {
-            mg.subgrid(Position(stripe_start, 0), Size(stripe_width, img_height))
-        } else {
-            mg.subgrid(
-                Position(stripe_start, 0),
-                Size(img_width - stripe_start, img_height),
-            )
-        };
-        println!("Processing block {}", stripe_num);
-        inflate_stripe(block, color_map, stripe_width, &mut stripe_grid);
-    }
+    mg.vertical_stripes_mut(stripe_width)
+        .iter_mut()
+        .zip(blocks)
+        .enumerate()
+        .for_each(|(block_num, (stripe, block))| {
+            println!("Processing block {}", block_num);
+            inflate_stripe(block, color_map, stripe_width, stripe);
+        });
     output
 }
 
-pub fn inflate_stripe(
-    reader: impl io::Read,
+pub fn inflate_stripe<T: io::Read>(
+    reader: T,
     color_map: &DataGrid<Color>,
     // It _is_ possible to get this from output.size(), but it breaks in the
     // case of the rightmost stripe, which is skinnier for output but
