@@ -241,6 +241,27 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
         stripes
     }
 
+    pub fn iter_mut(&mut self) -> MutPosIter<T> {
+        let Position(x_start, y_start) = self.anchor_pos;
+        let Size(data_width, data_height) = self.data_size;
+        let Size(width, height) = self.size;
+        let x_end = x_start + width;
+        let y_end = y_start + height;
+        let row_skip = data_width - width;
+        let mut iter = self.data.iter_mut();
+        let initial_skip = y_start * data_width + x_start - 1;
+        iter.nth(initial_skip);
+        MutPosIter {
+            iter,
+            x_start,
+            x_end,
+            row_skip,
+            y_end,
+            x: x_start,
+            y: y_start,
+        }
+    }
+
     pub fn size(&self) -> Size {
         self.size
     }
@@ -269,5 +290,34 @@ impl<'a, T: Copy> IndexMut<Position> for MutableDataGrid<'a, T> {
         let Size(data_width, _) = self.data_size;
 
         &mut self.data[data_y * data_width + data_x]
+    }
+}
+
+pub struct MutPosIter<'a, T: Copy> {
+    iter: std::slice::IterMut<'a, T>,
+    x_start: usize,
+    x_end: usize,
+    row_skip: usize,
+    y_end: usize,
+    x: usize,
+    y: usize,
+}
+
+impl<'a, T: Copy> Iterator for MutPosIter<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y == self.y_end - 1 && self.x == self.x_end {
+            return None;
+        }
+        if self.x == self.x_end {
+            // Start a new row
+            self.x = self.x_start;
+            self.y += 1;
+            self.iter.nth(self.row_skip)
+        } else {
+            self.x += 1;
+            self.iter.next()
+        }
     }
 }
