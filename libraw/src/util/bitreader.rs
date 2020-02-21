@@ -20,7 +20,9 @@ fn eof<T>() -> io::Result<T> {
 const BUFFER_BYTES: usize = size_of::<usize>();
 const BUFFER_BITS: usize = BUFFER_BYTES * 8;
 
-const BIT_MASK: [usize; 31] = [
+// I wanted to do this with a macro but apparently that would require a
+// procedural macro.
+const BIT_MASK: [usize; 32] = [
     (1 << 0) - 1,
     (1 << 1) - 1,
     (1 << 2) - 1,
@@ -52,6 +54,7 @@ const BIT_MASK: [usize; 31] = [
     (1 << 28) - 1,
     (1 << 29) - 1,
     (1 << 30) - 1,
+    (1 << 31) - 1,
 ];
 
 impl<T: io::Read> BitReader<T> {
@@ -94,6 +97,7 @@ impl<T: io::Read> BitReader<T> {
     }
 
     // This *also* reads off the 1 after the zeros.
+    #[inline(always)]
     pub fn count_continuous_0s(&mut self) -> io::Result<u32> {
         let mut counted_0s_total: u32 = 0;
         loop {
@@ -115,6 +119,7 @@ impl<T: io::Read> BitReader<T> {
     }
 
     // This also reads off the 0 after the 1s!
+    #[inline(always)]
     pub fn count_continuous_1s(&mut self) -> io::Result<u32> {
         let mut counted_1s_total = 0;
         loop {
@@ -134,6 +139,7 @@ impl<T: io::Read> BitReader<T> {
         }
     }
 
+    #[inline(always)]
     pub fn read_bits(&mut self, count: usize) -> io::Result<u32> {
         // not sure how it works at the margin yet
         debug_assert!(count <= 30);
