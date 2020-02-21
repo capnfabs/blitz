@@ -12,6 +12,8 @@ use crate::Color::{Blue, Green, Red};
 use itertools::Itertools;
 use std::io;
 
+use rayon::prelude::*;
+use std::io::Cursor;
 use std::iter::repeat;
 
 // TODO: this should be moved to a testing utilities file.
@@ -26,26 +28,24 @@ pub fn make_color_map() -> DataGrid<'static, Color> {
     )
 }
 
-pub fn inflate<'a, T>(
+pub fn inflate<'a>(
     img_size: Size,
     stripe_width: usize,
-    blocks: impl Iterator<Item = T>,
+    blocks: Vec<Cursor<&[u8]>>,
     color_map: &DataGrid<Color>,
-) -> Vec<u16>
-where
-    T: io::Read,
-{
+) -> Vec<u16> {
     let Size(img_width, img_height) = img_size;
     // Output image, should be 6000x4000x
     let mut output = vec![0; img_width * img_height];
     let mut mg = MutableDataGrid::new(&mut output, img_size);
     mg.vertical_stripes_mut(stripe_width)
-        .iter_mut()
+        .par_iter_mut()
         .zip(blocks)
         .enumerate()
         .for_each(|(block_num, (stripe, block))| {
             println!("Processing block {}", block_num);
             inflate_stripe(block, color_map, stripe_width, stripe);
+            println!("Finished block {}", block_num);
         });
     output
 }

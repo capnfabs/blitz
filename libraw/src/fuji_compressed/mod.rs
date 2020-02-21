@@ -15,6 +15,7 @@ use nom::IResult;
 
 use crate::util::datagrid::Size;
 pub use compress::compress;
+use itertools::Itertools;
 use std::io::Cursor;
 
 #[derive(Debug)]
@@ -106,7 +107,7 @@ pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     let (_i, blocks) = read_blocks(i, &block_sizes)?;
     println!("Compressed: {:#?}", header);
     println!("Blocks: {:#?}", block_sizes);
-    let blocks = blocks.iter().map(|x| Cursor::new(x));
+    let blocks = blocks.iter().map(|x| Cursor::new(*x)).collect_vec();
     let img_size = Size(header.raw_width as usize, header.raw_height as usize);
     let output = inflate::inflate(
         img_size,
