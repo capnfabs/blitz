@@ -70,7 +70,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let max = img_data
         .iter()
         // TODO: this is hardcoded!
-        .filter(|v| **v < 6000)
+        //.filter(|v| **v < 6000)
         .copied()
         .max()
         .unwrap();

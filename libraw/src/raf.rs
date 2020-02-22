@@ -1,6 +1,6 @@
 use crate::raf::EncodingType::{Compressed, Uncompressed, Unknown};
 use crate::raf::Tag::XTransMapping;
-use crate::tiff::IfdEntry;
+use crate::tiff::{IfdEntry, SRational};
 use crate::{fuji_compressed, tiff, Color};
 use itertools::Itertools;
 use memmap::Mmap;
@@ -302,6 +302,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
 
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
     let black_levels: Vec<u16> = black_levels.iter().map(|x| *x as u16).collect();
+    println!("Black levels: {:#?}", black_levels);
 
     // No idea what this one is either; it's 8 numbers, looks wb related
     // because _52[0] and _52[4] == _53[0].
@@ -330,17 +331,14 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
 
     let (_, img_data) = decode_result?;
 
-    println!("Got {} shorts", img_data.len());
-
-    // '51, '52, '55, '56 all look like some kind of curve.
+    // '51, '55, '56 all look like some kind of curve.
     // The first number looks like x/y axis lengths, then x positions, then y positions.
-
-    // Compressed format:
-    // starts with 49530110 0E0FC618 0017A003 000802A1
-    // 2279 - sample 1 002AC570 002BDD80 002C5DB0 002CE430 002C4E30 002D5320 002D8750 00278810
-    // sample 2 002CEC80 002D2DB0 002D4F50 002D3C20 002CF900 002CBB40 002C35B0 00267620
-    // then next 644 bytes are identical.
-    // maybe they're 4 bit? unclear
+    let _51: Vec<SRational> = tiff.load_offset_data(hm[&61451]).unwrap();
+    let _55: Vec<SRational> = tiff.load_offset_data(hm[&61455]).unwrap();
+    let _56: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
+    println!("51: {:?}", _51);
+    println!("55: {:?}", _55);
+    println!("56: {:?}", _56);
 
     Ok((
         raw,
