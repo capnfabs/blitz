@@ -241,7 +241,7 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
         stripes
     }
 
-    pub fn iter_mut(&mut self) -> MutPosIter<T> {
+    pub fn iter_pos_mut(&mut self) -> MutPosIter<T> {
         let Position(x_start, y_start) = self.anchor_pos;
         let Size(data_width, data_height) = self.data_size;
         let Size(width, height) = self.size;
@@ -259,11 +259,16 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
             x_start,
             x_end,
             row_skip,
+            y_start,
             y_end,
             x: x_start,
             y: y_start,
             started: false,
         }
+    }
+
+    pub fn iter_mut(&mut self) -> MutIter<T> {
+        MutIter(self.iter_pos_mut())
     }
 
     pub fn size(&self) -> Size {
@@ -302,6 +307,7 @@ pub struct MutPosIter<'a, T: Copy> {
     x_start: usize,
     x_end: usize,
     row_skip: usize,
+    y_start: usize,
     y_end: usize,
     // The x-y pos of the next value to take.
     x: usize,
@@ -310,12 +316,13 @@ pub struct MutPosIter<'a, T: Copy> {
 }
 
 impl<'a, T: Copy> Iterator for MutPosIter<'a, T> {
-    type Item = &'a mut T;
+    type Item = (Position, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.y == self.y_end && self.x == self.x_start {
             return None;
         }
+        let pos = Position(self.x - self.x_start, self.y - self.y_start);
         let val = if self.x == self.x_start && self.started {
             // Need to skip elements that were there before.
             self.iter.nth(self.row_skip)
@@ -328,7 +335,17 @@ impl<'a, T: Copy> Iterator for MutPosIter<'a, T> {
             self.y += 1;
             self.x = self.x_start;
         }
-        val
+        val.map(|v| (pos, v))
+    }
+}
+
+pub struct MutIter<'a, T: Copy>(MutPosIter<'a, T>);
+
+impl<'a, T: Copy> Iterator for MutIter<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(_, v)| v)
     }
 }
 
@@ -367,6 +384,50 @@ mod tests {
         let mut subgrid = mdg.subgrid(Position(2, 3), Size(4, 2));
         assert_eq!(
             subgrid.iter_mut().map(|x| *x).collect_vec(),
+            vec![20, 21, 22, 23, 26, 27, 28, 29]
+        );
+    }
+
+    #[test]
+    fn subgrid_iterator_with_pos() {
+        let mut data = (0..36).collect_vec();
+        let mut mdg = MutableDataGrid::new(&mut data, Size(6, 6));
+        let mut subgrid = mdg.subgrid(Position(0, 0), Size(2, 3));
+        let (pos, val): (Vec<_>, Vec<_>) = subgrid.iter_pos_mut().unzip();
+
+        assert_eq!(
+            pos,
+            vec![
+                Position(0, 0),
+                Position(1, 0),
+                Position(0, 1),
+                Position(1, 1),
+                Position(0, 2),
+                Position(1, 2)
+            ]
+        );
+        assert_eq!(
+            val.iter().map(|x| **x).collect_vec(),
+            vec![0, 1, 6, 7, 12, 13]
+        );
+
+        let mut subgrid = mdg.subgrid(Position(2, 3), Size(4, 2));
+        let (pos, val): (Vec<_>, Vec<_>) = subgrid.iter_pos_mut().unzip();
+        assert_eq!(
+            pos,
+            vec![
+                Position(0, 0),
+                Position(1, 0),
+                Position(2, 0),
+                Position(3, 0),
+                Position(0, 1),
+                Position(1, 1),
+                Position(2, 1),
+                Position(3, 1),
+            ]
+        );
+        assert_eq!(
+            val.iter().map(|x| **x).collect_vec(),
             vec![20, 21, 22, 23, 26, 27, 28, 29]
         );
     }
