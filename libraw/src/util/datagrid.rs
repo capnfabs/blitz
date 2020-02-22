@@ -243,7 +243,7 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
 
     pub fn iter_pos_mut(&mut self) -> MutPosIter<T> {
         let Position(x_start, y_start) = self.anchor_pos;
-        let Size(data_width, data_height) = self.data_size;
+        let Size(data_width, _) = self.data_size;
         let Size(width, height) = self.size;
         let x_end = x_start + width;
         let y_end = y_start + height;

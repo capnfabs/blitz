@@ -42,7 +42,9 @@ fn find_offsets(mapping: &DataGrid<Color>, pos: Position) -> [Position; 3] {
     ]
 }
 
+#[allow(dead_code)]
 pub struct Nearest(PhantomData<u16>);
+#[allow(dead_code)]
 pub struct Passthru(PhantomData<u16>);
 
 impl Demosaic<u16> for Nearest {

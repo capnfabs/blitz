@@ -61,10 +61,10 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     let mapping = DataGrid::wrap(&img.xtrans_mapping, Size(6, 6));
 
-    // Should fix this lol
-    let black_sub = |val: u16| -> u16 { val.saturating_sub(1022) };
-
-    let img_data: Vec<u16> = img.raw_data.iter().copied().map(|v| black_sub(v)).collect();
+    let mut img_data = img.raw_data.clone();
+    let mut img_mdg =
+        MutableDataGrid::new(&mut img_data, Size(img.width as usize, img.height as usize));
+    levels::black_sub(&mut img_mdg);
 
     // hot pixel elimination through a hard-coded filter lol
     let max = img_data
