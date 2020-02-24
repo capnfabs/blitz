@@ -77,6 +77,22 @@ struct Offsets {
     raw: OffsetLength,
 }
 
+pub struct FileParts<'a> {
+    pub jpeg: &'a [u8],
+    pub metadata: &'a [u8],
+    pub raw: &'a [u8],
+}
+
+impl<'a> FileParts<'a> {
+    fn from_offsets(data: &'a [u8], offsets: &Offsets) -> FileParts<'a> {
+        FileParts {
+            jpeg: offsets.jpeg.apply(data),
+            metadata: offsets.metadata.apply(data),
+            raw: offsets.raw.apply(data),
+        }
+    }
+}
+
 fn offset_size(input: I) -> IResult<I, OffsetLength> {
     let (i, (offset, length)) = tuple((be_u32, be_u32))(input)?;
     Ok((i, OffsetLength { offset, length }))
@@ -268,25 +284,6 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     let (_, (ifd, next)) = tiff::parse_ifd(&raw[(ifd_block.val_u32().unwrap() as usize)..])?;
     assert!(next.is_none());
 
-    for entry in &ifd {
-        if entry.count < 20 {
-            let data: Box<dyn std::fmt::Debug> = if entry.value_inlined() == No {
-                Box::new(tiff.load_offset_data::<u32>(entry))
-            } else {
-                Box::new(entry.val_u32())
-            };
-            println!(
-                "Tag {:?}/{:x}, type={:?}, count={:?}, data:{:?}",
-                entry.tag, entry.tag, entry.field_type, entry.count, data,
-            );
-        } else {
-            println!(
-                "Tag {:?}, type={:?}, count={:?}, data redacted",
-                entry.tag, entry.field_type, entry.count
-            );
-        }
-    }
-
     let hm: HashMap<u16, &IfdEntry> = ifd.iter().map(|item| (item.tag, item)).collect();
     let width = hm[&61441].val_u32().unwrap() as Width;
     let height = hm[&61442].val_u32().unwrap() as Height;
@@ -409,6 +406,14 @@ impl RafFile {
         let result = parse_all(&self.mmap);
         match result {
             Ok((_, parsed)) => Ok(parsed),
+            Err(_) => Err(RafError::Unknown),
+        }
+    }
+
+    pub fn file_parts(&self) -> Result<FileParts, RafError> {
+        let result = tuple((header, offset_sizes))(&self.mmap);
+        match result {
+            Ok((_, (_, offsets))) => Ok(FileParts::from_offsets(&self.mmap, &offsets)),
             Err(_) => Err(RafError::Unknown),
         }
     }

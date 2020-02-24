@@ -221,7 +221,6 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
                 anchor_pos: Position(stripe_num * width, 0).extending(self.anchor_pos),
                 size: Size(width, self.size.1),
             };
-            println!("{:?}", grid);
             stripes.push(grid)
         }
 
@@ -234,7 +233,6 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
                 anchor_pos: Position(x_offset, 0).extending(self.anchor_pos),
                 size: Size(last_width, self.size.1),
             };
-            println!("{:?}", grid);
             stripes.push(grid);
         }
 
