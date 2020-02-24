@@ -103,7 +103,7 @@ impl OffsetLength {
 }
 
 #[derive(Debug)]
-enum Tag<'a> {
+pub enum Tag<'a> {
     XTransMapping(&'a [u8]), //6x6 grid with the Xtrans mapping, 0-1-2s represent colors
     HeightWidthSensor(Height, Width),
     CropTopLeft(Height, Width), // Crop Top Left? According to Exiftool. Unclear what this is in reference to
@@ -143,10 +143,16 @@ fn parse_tag<'a, E: ParseError<&'a [u8]>>(code: u16, data: &'a [u8]) -> Result<T
             Tag::AspectRatio(y, x)
         }
         /*
-        0x0130 => Tag::Unknown3,
-        0x0141 => Tag::Unknown4,
-        0x9650 => Tag::Unknown5, // dcraw: apparently something exposure related? midpointshift?
+        0x0130 => Tag::Unknown3, Consistently 0C0C0C0C on every photo from my camera / samples
+        0x0141 => Tag::Unknown4, Consistently 0x000E002A on every photo from my camera (14, 42)
+        // dcraw: apparently something exposure related? midpointshift?
+        // On *some* files (7371, 7375, 7723) these are FF540064.
+        // On everything else, they're FFB80064.
+        // That's a 100 different in the 2nd value.
+        // Might be that dynamic range setting?
+        0x9650 => Tag::Unknown5,
         */
+        // This is a big block that nobody except Adobe knows how to parse.
         0xC000 => Tag::RAFData(data),
         other => Tag::Unknown(other, data),
     };
@@ -178,7 +184,7 @@ pub struct ParsedRafFile<'a> {
     header: Header<'a>,
     jpg_preview: &'a [u8],
     // This is in the middle RAF section
-    metadata: ImgMeta<'a>,
+    pub metadata: ImgMeta<'a>,
     tiffish: TiffishData,
 }
 
@@ -353,6 +359,13 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     ))
 }
 
+fn parse_only_metadata(input: I) -> IResult<I, ImgMeta> {
+    let (_, (_, offsets)) = tuple((header, offset_sizes))(input)?;
+    let metadata = offsets.metadata.apply(input);
+    let (i, metadata) = parse_metadata(metadata)?;
+    Ok((i, metadata))
+}
+
 fn parse_all(input: I) -> IResult<I, ParsedRafFile> {
     let (_, (header, offsets)) = tuple((header, offset_sizes))(input)?;
     let jpg_preview = offsets.jpeg.apply(input);
@@ -382,6 +395,14 @@ impl RafFile {
         let file = File::open(path)?;
         let mmap = unsafe { Mmap::map(&file) }?;
         Ok(RafFile { file, mmap })
+    }
+
+    pub fn parse_meta(&self) -> Result<ImgMeta, RafError> {
+        let result = parse_only_metadata(&self.mmap);
+        match result {
+            Ok((_, parsed)) => Ok(parsed),
+            Err(_) => Err(RafError::Unknown),
+        }
     }
 
     pub fn parse_raw(&self) -> Result<ParsedRafFile, RafError> {
