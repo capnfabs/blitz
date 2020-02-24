@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::map;
 use nom::multi::count;
@@ -69,6 +70,75 @@ impl FieldType {
             FieldType::Unknown(_) => None,
         }
     }
+
+    fn debug_repr(&self, data: &[u8]) -> String {
+        match self {
+            FieldType::Byte | FieldType::SByte | FieldType::Undefined | FieldType::Unknown(_) => {
+                // Treat as bytes
+                let mut data = hex::encode(data);
+                data.make_ascii_uppercase();
+                let data = data
+                    .as_bytes()
+                    .chunks(64)
+                    .map(|chunk| {
+                        chunk
+                            .chunks(8)
+                            .map(|chunk| std::str::from_utf8(chunk).unwrap())
+                            .join(" ")
+                    })
+                    .join("\n");
+                data
+            }
+            FieldType::Ascii => {
+                // Treat as string
+                String::from_utf8(data.to_vec()).unwrap()
+            }
+            FieldType::Short
+            | FieldType::Long
+            | FieldType::SShort
+            | FieldType::SLong
+            | FieldType::Float
+            | FieldType::Double
+            | FieldType::SRational
+            | FieldType::Rational => {
+                let chunks = data.chunks_exact(self.type_size().unwrap());
+                assert_eq!(chunks.remainder().len(), 0);
+                if chunks.len() > 1 {
+                    format!("[{}]", chunks.map(|x| self.debug_repr_single(x)).join(", "))
+                } else {
+                    chunks
+                        .map(|x| self.debug_repr_single(x))
+                        .exactly_one()
+                        .unwrap()
+                }
+            }
+        }
+    }
+
+    fn debug_repr_single(&self, data: &[u8]) -> String {
+        // Might not need this assertion, because we effectively do it in
+        // the try_intos.
+        assert_eq!(self.type_size().unwrap(), data.len());
+        match self {
+            FieldType::Short => format!("{}", u16::from_le_bytes(data.try_into().unwrap())),
+            FieldType::Long => format!("{}", u32::from_le_bytes(data.try_into().unwrap())),
+            FieldType::Rational => {
+                let first = u32::from_le_bytes(data[..4].try_into().unwrap());
+                let second = u32::from_le_bytes(data[4..].try_into().unwrap());
+                format!("{}/{}", first, second)
+            }
+            FieldType::SShort => format!("{}", i16::from_le_bytes(data.try_into().unwrap())),
+            FieldType::SLong => format!("{}", i32::from_le_bytes(data.try_into().unwrap())),
+            FieldType::SRational => {
+                let first = i32::from_le_bytes(data[..4].try_into().unwrap());
+                let second = i32::from_le_bytes(data[4..].try_into().unwrap());
+                format!("{}/{}", first, second)
+            }
+            FieldType::Float => format!("{}", f32::from_le_bytes(data.try_into().unwrap())),
+            FieldType::Double => format!("{}", f64::from_le_bytes(data.try_into().unwrap())),
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl From<u16> for FieldType {
@@ -130,21 +200,6 @@ impl Parseable for SRational {
     }
 }
 
-/*
-// Keeping this here until I manage to write thingies for the other types
-match self.field_type {
-            FieldType::Short => count(le_u16, c)(input),
-            FieldType::Long => ,
-            FieldType::Rational => count(tuple((le_u32, le_u32)), c),
-            FieldType::SShort => count(le_i16, c),
-            FieldType::SLong => count(le_i32, c),
-            FieldType::SRational => count(tuple((le_i32, le_i32)), c),
-            FieldType::Float => count(le_f32, c),
-            FieldType::Double => count(le_f64, c),
-            _ => take(c),
-        }
-*/
-
 impl<'a> IfdEntry<'a> {
     pub fn value_byte_size(&self) -> Option<usize> {
         let item_size = self.field_type.type_size()?;
@@ -197,6 +252,23 @@ impl<'a> IfdEntry<'a> {
 impl<'a> TiffFile<'a> {
     pub fn load_offset_data<T: Parseable>(&self, ifd_entry: &IfdEntry<'a>) -> Option<Vec<T>> {
         ifd_entry.load_from_offset(self.data)
+    }
+
+    pub fn data_for_ifd_entry(&self, ifd_entry: &'a IfdEntry) -> &'a [u8] {
+        let byte_size = ifd_entry.count as usize * ifd_entry.field_type.type_size().unwrap_or(1);
+        if byte_size <= 4 {
+            &ifd_entry.value_offset[0..byte_size]
+        } else {
+            let start = ifd_entry.val_offset().unwrap();
+            let end = start + byte_size;
+            &self.data[start..end]
+        }
+    }
+
+    pub fn debug_value_for_ifd_entry(&self, ifd: &IfdEntry) -> String {
+        // the unwrap_or effectively treats Unknowns as 1
+        let data = self.data_for_ifd_entry(ifd);
+        ifd.field_type.debug_repr(data)
     }
 }
 

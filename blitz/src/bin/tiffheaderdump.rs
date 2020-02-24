@@ -2,25 +2,50 @@ use clap::{App, Arg};
 
 use libraw::tiff;
 
-use libraw::tiff::parse_ifd;
+use libraw::tiff::{parse_ifd, IfdEntry, TiffFile};
 use memmap::Mmap;
+
+use std::convert::TryInto;
+use std::error::Error;
 use std::fs::File;
 
 fn main() {
     let matches = App::new("TIFF Header Dump")
         .arg(Arg::with_name("TIFF FILE").required(true).index(1))
-        .arg(Arg::with_name("data").long("data"))
+        .arg(
+            Arg::with_name("tags")
+                .long("tag")
+                .short("t")
+                .multiple(true)
+                .takes_value(true),
+        )
+        .arg(Arg::with_name("Dump All").long("dump-all").short("v"))
         .get_matches();
 
     let input = matches.value_of("TIFF FILE").unwrap();
-    let dump_data_less_than = matches
-        .value_of("data")
-        .map(|x| x.parse::<usize>().unwrap());
+    let dump_tags = matches.values_of("tags");
 
-    dump_tiff(input, dump_data_less_than.unwrap_or(0));
+    let dump_tags = if let Some(tag_iter) = dump_tags {
+        tag_iter.map(|x| hexdec(x).unwrap()).collect()
+    } else {
+        vec![]
+    };
+
+    let dump_all_values = matches.is_present("Dump All");
+
+    dump_tiff(input, &dump_tags, dump_all_values);
 }
 
-fn dump_tiff(img_file: &str, dump_data_less_than: usize) {
+fn hexdec(data: &str) -> Result<u16, Box<dyn Error>> {
+    let mut data = data.to_string();
+    if data.len() % 2 != 0 {
+        data = format!("0{}", data);
+    }
+    let bytes: &[u8] = &hex::decode(data)?;
+    Ok(u16::from_be_bytes(bytes.try_into()?))
+}
+
+fn dump_tiff(img_file: &str, tags: &[u16], print_all_data: bool) {
     println!("Loading RAW data");
     let file = File::open(img_file).unwrap();
     let mmap = unsafe { Mmap::map(&file) }.unwrap();
@@ -29,15 +54,7 @@ fn dump_tiff(img_file: &str, dump_data_less_than: usize) {
     println!("Opened file: {:?}", img_file);
 
     for ifd in &file.ifds {
-        for entry in ifd {
-            println!(
-                "Tag: {:X}, Type: {:?}, Elements: {}",
-                entry.tag, entry.field_type, entry.count
-            );
-            if dump_data_less_than >= entry.count as usize {
-                //println!("Values: {:#?}", entry.value_debug())
-            }
-        }
+        dump_entries(tags, &file, &ifd, print_all_data)
     }
     for ifd in &file.ifds {
         for entry in ifd.iter().filter(|tag| tag.tag == 0x14A) {
@@ -46,17 +63,26 @@ fn dump_tiff(img_file: &str, dump_data_less_than: usize) {
             let subifd = &mmap[offset..];
             let (_, (parsed, _)) = parse_ifd(subifd).unwrap();
             println!("!!SubIFD!!");
-            for entry in parsed {
-                println!(
-                    "Tag: {:X}, Type: {:?}, Elements: {}, Val: {}",
-                    entry.tag,
-                    entry.field_type,
-                    entry.count,
-                    entry
-                        .val_u32()
-                        .map(|x| format!("{}", x))
-                        .unwrap_or("--".to_string())
-                );
+            dump_entries(tags, &file, &parsed, print_all_data)
+        }
+    }
+}
+
+fn dump_entries(tags: &[u16], file: &TiffFile, parsed: &Vec<IfdEntry>, dump_all_data: bool) -> () {
+    for entry in parsed {
+        if tags.len() == 0 || tags.contains(&entry.tag) {
+            let val = entry
+                .val_u32()
+                .map(|x| format!(", Val: {}", x))
+                .unwrap_or(String::new());
+
+            println!(
+                "Tag: {:X}, Type: {:?}, Count: {}{}",
+                entry.tag, entry.field_type, entry.count, val
+            );
+
+            if dump_all_data {
+                println!("Data:\n{}\n---", file.debug_value_for_ifd_entry(&entry))
             }
         }
     }
