@@ -2,6 +2,8 @@ use clap::{App, Arg};
 
 use libraw::tiff;
 
+use chrono::format::Pad::Zero;
+use libraw::tiff::parse_ifd;
 use memmap::Mmap;
 use std::fs::File;
 
@@ -27,7 +29,7 @@ fn dump_tiff(img_file: &str, dump_data_less_than: usize) {
     let (_, file) = tiff::parse_tiff(&mmap).unwrap();
     println!("Opened file: {:?}", img_file);
 
-    for ifd in file.ifds {
+    for ifd in &file.ifds {
         for entry in ifd {
             println!(
                 "Tag: {:X}, Type: {:?}, Elements: {}",
@@ -35,6 +37,27 @@ fn dump_tiff(img_file: &str, dump_data_less_than: usize) {
             );
             if dump_data_less_than >= entry.count as usize {
                 //println!("Values: {:#?}", entry.value_debug())
+            }
+        }
+    }
+    for ifd in &file.ifds {
+        for entry in ifd.iter().filter(|tag| tag.tag == 0x14A) {
+            assert_eq!(entry.count, 1);
+            let offset = entry.val_u32().unwrap() as usize;
+            let subifd = &mmap[offset..];
+            let (_, (parsed, _)) = parse_ifd(subifd).unwrap();
+            println!("!!SubIFD!!");
+            for entry in parsed {
+                println!(
+                    "Tag: {:X}, Type: {:?}, Elements: {}, Val: {}",
+                    entry.tag,
+                    entry.field_type,
+                    entry.count,
+                    entry
+                        .val_u32()
+                        .map(|x| format!("{}", x))
+                        .unwrap_or("--".to_string())
+                );
             }
         }
     }
