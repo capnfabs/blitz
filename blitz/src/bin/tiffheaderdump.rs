@@ -2,7 +2,6 @@ use clap::{App, Arg};
 
 use libraw::tiff;
 
-use chrono::format::Pad::Zero;
 use libraw::tiff::parse_ifd;
 use memmap::Mmap;
 use std::fs::File;
