@@ -15,7 +15,6 @@ use nom::IResult;
 use std::fmt::Debug;
 use std::fs::File;
 use std::path::Path;
-use tristate::TriState::No;
 
 type I<'a> = &'a [u8];
 
