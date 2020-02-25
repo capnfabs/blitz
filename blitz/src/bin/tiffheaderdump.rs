@@ -2,7 +2,7 @@ use clap::{App, Arg};
 
 use libraw::tiff;
 
-use libraw::tiff::{parse_ifd, IfdEntry, TiffFile};
+use libraw::tiff::{parse_ifd, FieldType, IfdEntry, TiffFile};
 use memmap::Mmap;
 
 use libraw::raf::RafFile;
@@ -34,7 +34,7 @@ fn main() {
 
     let dump_all_values = matches.is_present("Dump All");
 
-    dump_tiff(input, &dump_tags, dump_all_values);
+    main_command(input, &dump_tags, dump_all_values);
 }
 
 fn hexdec(data: &str) -> Result<u16, Box<dyn Error>> {
@@ -46,14 +46,19 @@ fn hexdec(data: &str) -> Result<u16, Box<dyn Error>> {
     Ok(u16::from_be_bytes(bytes.try_into()?))
 }
 
-fn dump_tiff(img_file: &str, tags: &[u16], print_all_data: bool) {
+fn main_command(img_file: &str, tags: &[u16], print_all_data: bool) {
     println!("Opening file: {:?}", img_file);
 
     if img_file.to_lowercase().ends_with(".raf") {
         println!("Treating as RAF File");
         let raf = RafFile::open(img_file).unwrap();
         let offsets = raf.file_parts().unwrap();
+        println!("JPEG Part:");
+        dump_tiff_details(tags, print_all_data, offsets.jpeg_exif_tiff);
+        println!("-----------");
+        println!("Raw Part:");
         dump_tiff_details(tags, print_all_data, offsets.raw);
+        println!("-----------");
     } else {
         let file = File::open(img_file).unwrap();
         let mmap = unsafe { Mmap::map(&file) }.unwrap();
@@ -63,20 +68,22 @@ fn dump_tiff(img_file: &str, tags: &[u16], print_all_data: bool) {
 
 fn dump_tiff_details(tags: &[u16], print_all_data: bool, data: &[u8]) -> () {
     let (_, file) = tiff::parse_tiff(&data).unwrap();
-    for ifd in &file.ifds {
-        dump_entries(tags, &file, &ifd, print_all_data)
+    for (id, ifd) in file.ifds.iter().enumerate() {
+        println!("IFD #{}", id);
+        dump_entries(tags, &file, &ifd, print_all_data);
+        println!("-----------")
     }
     for ifd in &file.ifds {
-        for entry in ifd
-            .iter()
-            .filter(|tag| tag.tag == 0x14A || tag.tag == 0xF000)
-        {
+        for entry in ifd.iter().filter(|tag| {
+            tag.tag == 0x14A || tag.tag == 0xF000 || tag.tag == 0x8769 || tag.tag == 0xA005
+        }) {
             assert_eq!(entry.count, 1);
             let offset = entry.val_u32().unwrap() as usize;
             let subifd = &data[offset..];
             let (_, (parsed, _)) = parse_ifd(subifd).unwrap();
-            println!("!!SubIFD!!");
-            dump_entries(tags, &file, &parsed, print_all_data)
+            println!("!!SubIFD from tag {:X}!!", entry.tag);
+            dump_entries(tags, &file, &parsed, print_all_data);
+            println!("--!!SubIFD from tag {:X}!!--", entry.tag);
         }
     }
 }
@@ -84,18 +91,31 @@ fn dump_tiff_details(tags: &[u16], print_all_data: bool, data: &[u8]) -> () {
 fn dump_entries(tags: &[u16], file: &TiffFile, parsed: &Vec<IfdEntry>, dump_all_data: bool) -> () {
     for entry in parsed {
         if tags.len() == 0 || tags.contains(&entry.tag) {
-            let val = entry
-                .val_u32()
-                .map(|x| format!(", Val: {}", x))
-                .unwrap_or(String::new());
+            let inline_val =
+                if entry.count < 4 || (entry.field_type == FieldType::Ascii && entry.count < 80) {
+                    Some(file.debug_value_for_ifd_entry(entry))
+                } else {
+                    None
+                };
 
-            println!(
-                "Tag: {:X}, Type: {:?}, Count: {}{}",
-                entry.tag, entry.field_type, entry.count, val
+            let offset = entry.val_as_offset();
+
+            print!(
+                "Tag: {:X}, Type: {:?}, Count: {}",
+                entry.tag, entry.field_type, entry.count
             );
 
-            if dump_all_data {
-                println!("Data:\n{}\n---", file.debug_value_for_ifd_entry(&entry))
+            if let Some(offset) = offset {
+                print!(", Offset: {}", offset);
+            }
+
+            if let Some(val) = inline_val {
+                println!(", Val: {}", val);
+            } else if dump_all_data {
+                println!(", Val:\n{}\n---", file.debug_value_for_ifd_entry(&entry))
+            } else {
+                // Just print the terminator
+                println!()
             }
         }
     }

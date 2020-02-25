@@ -78,14 +78,26 @@ struct Offsets {
 
 pub struct FileParts<'a> {
     pub jpeg: &'a [u8],
+    pub jpeg_exif_tiff: &'a [u8],
     pub metadata: &'a [u8],
     pub raw: &'a [u8],
 }
 
+// TODO: this isn't polished or resilient; maybe I should use a library for this.
+fn find_exif_tiff(jpeg_data: &[u8]) -> IResult<I, &[u8]> {
+    let (i, (_tag, length, _tag2, _exif_version)) =
+        tuple((tag(b"\xFF\xD8\xFF\xE1"), be_u16, tag(b"Exif"), be_u16))(jpeg_data)?;
+    Ok((i, &i[..(length as usize - 2)]))
+}
+
 impl<'a> FileParts<'a> {
     fn from_offsets(data: &'a [u8], offsets: &Offsets) -> FileParts<'a> {
+        let jpeg_data = offsets.jpeg.apply(data);
+        // TODO: this is in a gross spot, and we shouldn't call unwrap.
+        let (_, exif_tiff) = find_exif_tiff(jpeg_data).unwrap();
         FileParts {
-            jpeg: offsets.jpeg.apply(data),
+            jpeg: jpeg_data,
+            jpeg_exif_tiff: exif_tiff,
             metadata: offsets.metadata.apply(data),
             raw: offsets.raw.apply(data),
         }

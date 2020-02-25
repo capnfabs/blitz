@@ -233,7 +233,7 @@ impl<'a> IfdEntry<'a> {
         Some(u32::from_le_bytes(*self.value_offset))
     }
 
-    fn val_offset(&self) -> Option<usize> {
+    pub fn val_as_offset(&self) -> Option<usize> {
         if self.value_inlined() == TriState::Yes {
             None
         } else {
@@ -244,7 +244,7 @@ impl<'a> IfdEntry<'a> {
     }
 
     fn load_from_offset<T: Parseable>(&self, input: I) -> Option<Vec<T>> {
-        let offset = self.val_offset()?;
+        let offset = self.val_as_offset()?;
         self.parse(&input[offset..])
     }
 }
@@ -259,7 +259,7 @@ impl<'a> TiffFile<'a> {
         if byte_size <= 4 {
             &ifd_entry.value_offset[0..byte_size]
         } else {
-            let start = ifd_entry.val_offset().unwrap();
+            let start = ifd_entry.val_as_offset().unwrap();
             let end = start + byte_size;
             &self.data[start..end]
         }
