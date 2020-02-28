@@ -1,3 +1,5 @@
+#![allow(clippy::just_underscores_and_digits, clippy::too_many_arguments)]
+
 pub mod fuji_compressed;
 pub mod raf;
 pub mod tiff;
@@ -20,7 +22,7 @@ pub enum Color {
 }
 
 impl Color {
-    pub fn idx(&self) -> usize {
+    pub fn idx(self) -> usize {
         match self {
             Color::Red => 0,
             Color::Green => 1,
@@ -38,7 +40,7 @@ impl Color {
     }
 
     // TODO does this belong here?
-    pub fn multipliers(&self) -> [u16; 3] {
+    pub fn multipliers(self) -> [u16; 3] {
         match self {
             Color::Red => [1, 0, 0],
             Color::Green => [0, 1, 0],
@@ -46,7 +48,7 @@ impl Color {
         }
     }
 
-    pub fn letter(&self) -> &'static str {
+    pub fn letter(self) -> &'static str {
         match self {
             Color::Red => "R",
             Color::Green => "G",

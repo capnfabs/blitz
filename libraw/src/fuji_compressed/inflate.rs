@@ -28,7 +28,7 @@ pub fn make_color_map() -> DataGrid<'static, Color> {
     )
 }
 
-pub fn inflate<'a>(
+pub fn inflate(
     img_size: Size,
     stripe_width: usize,
     blocks: Vec<Cursor<&[u8]>>,
@@ -83,7 +83,7 @@ pub fn inflate_stripe<T: io::Read>(
         let results = inflate_line(&mut r, &mut gradients, &prev_lines);
         prev_lines = collect_carry_lines(&results);
         copy_line_to_xtrans(
-            &color_map,
+            color_map,
             &mut output.subgrid(Position(0, line * 6), Size(output.size().0, 6)),
             results,
         )
@@ -91,10 +91,10 @@ pub fn inflate_stripe<T: io::Read>(
 }
 
 fn copy_line_to_xtrans(
-    color_map: &&DataGrid<Color>,
+    color_map: &DataGrid<Color>,
     output: &mut MutableDataGrid<u16>,
     results: Colored<Vec<Vec<u16>>>,
-) -> () {
+) {
     for row_idx in 0..6 {
         let (r, g, b) = results.split();
         let line_colors = Colored::new(&r[row_idx / 2], &g[row_idx], &b[row_idx / 2]);
@@ -143,10 +143,10 @@ fn inflate_line<R: io::Read>(
             .map(|(a, b)| (flatten(a), flatten(b)));
 
         for ((ca_even, cb_even), (ca_odd, cb_odd)) in zipped {
-            for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
+            for thing in &[ca_even, cb_even, ca_odd, cb_odd] {
                 if let Some(((color, row), idx)) = thing {
-                    let value = if is_interpolated(*color, *row, idx) {
-                        interpolate_value(&colors, &carry_results, *row, *color, idx)
+                    let value = if is_interpolated(*color, *row, *idx) {
+                        interpolate_value(&colors, &carry_results, *row, *color, *idx)
                     } else {
                         compute_value_and_update_gradients(
                             reader,
@@ -155,11 +155,11 @@ fn inflate_line<R: io::Read>(
                             &carry_results,
                             *row,
                             *color,
-                            idx,
+                            *idx,
                             *grad_set_idx,
                         )
                     };
-                    colors[*color][*row][idx] = value;
+                    colors[*color][*row][*idx] = value;
                 }
             }
         }

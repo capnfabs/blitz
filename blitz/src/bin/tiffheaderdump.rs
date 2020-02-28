@@ -66,7 +66,7 @@ fn main_command(img_file: &str, tags: &[u16], print_all_data: bool) {
     }
 }
 
-fn dump_tiff_details(tags: &[u16], print_all_data: bool, data: &[u8]) -> () {
+fn dump_tiff_details(tags: &[u16], print_all_data: bool, data: &[u8]) {
     let (_, file) = tiff::parse_tiff(&data).unwrap();
     for (id, ifd) in file.ifds.iter().enumerate() {
         println!("IFD #{}", id);
@@ -88,9 +88,9 @@ fn dump_tiff_details(tags: &[u16], print_all_data: bool, data: &[u8]) -> () {
     }
 }
 
-fn dump_entries(tags: &[u16], file: &TiffFile, parsed: &Vec<IfdEntry>, dump_all_data: bool) -> () {
+fn dump_entries(tags: &[u16], file: &TiffFile, parsed: &[IfdEntry], dump_all_data: bool) {
     for entry in parsed {
-        if tags.len() == 0 || tags.contains(&entry.tag) {
+        if tags.is_empty() || tags.contains(&entry.tag) {
             let inline_val =
                 if entry.count < 4 || (entry.field_type == FieldType::Ascii && entry.count < 80) {
                     Some(file.debug_value_for_ifd_entry(entry))

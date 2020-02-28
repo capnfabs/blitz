@@ -53,7 +53,7 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    fn type_size(&self) -> Option<usize> {
+    fn type_size(self) -> Option<usize> {
         match self {
             FieldType::Byte => Some(1),
             FieldType::Ascii => Some(1),
@@ -71,14 +71,13 @@ impl FieldType {
         }
     }
 
-    fn debug_repr(&self, data: &[u8]) -> String {
+    fn debug_repr(self, data: &[u8]) -> String {
         match self {
             FieldType::Byte | FieldType::SByte | FieldType::Undefined | FieldType::Unknown(_) => {
                 // Treat as bytes
                 let mut data = hex::encode(data);
                 data.make_ascii_uppercase();
-                let data = data
-                    .as_bytes()
+                data.as_bytes()
                     .chunks(64)
                     .map(|chunk| {
                         chunk
@@ -86,8 +85,7 @@ impl FieldType {
                             .map(|chunk| std::str::from_utf8(chunk).unwrap())
                             .join(" ")
                     })
-                    .join("\n");
-                data
+                    .join("\n")
             }
             FieldType::Ascii => {
                 // Treat as string
@@ -115,7 +113,7 @@ impl FieldType {
         }
     }
 
-    fn debug_repr_single(&self, data: &[u8]) -> String {
+    fn debug_repr_single(self, data: &[u8]) -> String {
         // Might not need this assertion, because we effectively do it in
         // the try_intos.
         assert_eq!(self.type_size().unwrap(), data.len());
@@ -367,7 +365,7 @@ mod tests {
                 tag: 0xF002,
                 field_type: FieldType::Long,
                 count: 1,
-                value_offset: &h(0xC00F0000),
+                value_offset: &h(0xC00F_0000),
             }
         );
         assert_eq!(

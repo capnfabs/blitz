@@ -70,6 +70,7 @@ fn process_stripe<T: SampleTarget>(
 ) {
     let mut prev_lines = {
         let zeros = vec![0u16; REQUIRED_CAPACITY];
+        #[allow(clippy::redundant_clone)]
         Colored::new(
             vec![zeros.clone(), zeros.clone()],
             vec![zeros.clone(), zeros.clone()],
@@ -185,7 +186,7 @@ fn process_line<T: SampleTarget>(
     fill_blanks_in_line(carry_results, &mut colors);
 
     // This is the thing that actually does the work.
-    make_samples_for_line(&mut colors, gradients, carry_results, output);
+    make_samples_for_line(&colors, gradients, carry_results, output);
 
     colors
 }
@@ -217,8 +218,8 @@ fn make_samples_for_line<T: SampleTarget>(
             .map(|(a, b)| (flatten(a), flatten(b)));
 
         for ((ca_even, cb_even), (ca_odd, cb_odd)) in zipped {
-            for thing in vec![ca_even, cb_even, ca_odd, cb_odd] {
-                if let Some(((color, row), idx)) = thing {
+            for thing in &[ca_even, cb_even, ca_odd, cb_odd] {
+                if let Some(((color, row), idx)) = *thing {
                     if !is_interpolated(*color, *row, idx) {
                         let sample = make_sample(
                             &colors,
@@ -273,7 +274,7 @@ fn make_sample(
     let actual_value = cdata[row_idx][idx];
     let grad_is_negative = which_grad < 0;
 
-    let sample = compute_sample(weighted_average, actual_value, grad, grad_is_negative);
+    let sample = compute_sample(weighted_average, actual_value, *grad, grad_is_negative);
 
     // Finally: update gradient.
     let delta = actual_value as i32 - weighted_average as i32;
@@ -286,7 +287,7 @@ fn make_sample(
 fn compute_sample(
     weighted_average: u16,
     actual_value: u16,
-    grad: &Grad,
+    grad: Grad,
     grad_instructs_subtraction: bool,
 ) -> Sample {
     let delta = actual_value as i32 - weighted_average as i32;
@@ -307,7 +308,7 @@ fn compute_sample(
         let encoding = if invert {
             (abs_delta - 1) << 1 | 0b1
         } else {
-            abs_delta << 1 | 0b0
+            abs_delta << 1
         };
         let (upper, lower) = split_at(encoding, total_base2_bits);
         Sample::SplitDelta {
