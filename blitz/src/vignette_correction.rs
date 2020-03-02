@@ -5,25 +5,17 @@ use libraw::tiff::SRational;
 use na::{DMatrix, DVector};
 use std::convert::TryInto;
 
-const FROM_DNG: [f64; 5] = [
-    0.133794009538245,
-    0.789938863225111,
-    -2.34986450673864,
-    2.46098819026598,
-    -0.663714915925439,
-];
-
 const OUTPUT_COEFS: usize = 5;
 
 #[derive(Debug, PartialEq, Clone)]
-struct VignetteCorrection([f32; OUTPUT_COEFS]);
+pub struct VignetteCorrection([f32; OUTPUT_COEFS]);
 
 impl VignetteCorrection {
-    fn apply_gain(&self, center_distance: f32, value: f32) -> f32 {
+    pub fn apply_gain(&self, center_distance: f32, value: f32) -> f32 {
         self.compute_gain(center_distance) * value
     }
     fn compute_gain(&self, center_distance: f32) -> f32 {
-        assert!(center_distance <= 1f32);
+        //assert!(center_distance <= 1f32);
         let [k0, k1, k2, k3, k4] = self.0;
         let r2 = center_distance.powi(2);
         let r4 = r2.powi(2);
@@ -53,9 +45,9 @@ fn linear_gain_to_coefs(xs: &[f32], ys: &[f32]) -> [f32; OUTPUT_COEFS] {
         .unwrap()
 }
 
-// TODO: should this get moved to the Fuji sublibrary thing?
-fn tiff_tag_to_vignette_coefs(entry: &[SRational]) -> VignetteCorrection {
-    let SRational(max_pixels, max_points) = entry[0];
+// TODO: should this get moved to a Fuji sublibrary thing?
+pub fn from_fuji_tags(entry: &[SRational]) -> VignetteCorrection {
+    let SRational(_max_pixels, max_points) = entry[0];
     let max_points = max_points as usize;
     let x_vals = &entry[1..(max_points + 1)];
     let y_vals = &entry[(max_points + 1)..];
@@ -77,17 +69,10 @@ fn tiff_tag_to_vignette_coefs(entry: &[SRational]) -> VignetteCorrection {
     VignetteCorrection(coefs)
 }
 
-fn convert_the_thing(vals: &[f32]) -> impl Fn(u16) -> u16 {
-    fn scaler(val: u16) -> u16 {
-        0
-    }
-    scaler
-}
-
 #[cfg(test)]
 mod test {
     use crate::vignette_correction::{
-        linear_gain_to_coefs, tiff_tag_to_vignette_coefs, VignetteCorrection,
+        from_fuji_tags, fuji_tiff_tag_to_vignette_coefs, linear_gain_to_coefs, VignetteCorrection,
     };
     use itertools::Itertools;
     use libraw::tiff::SRational;
@@ -119,7 +104,7 @@ mod test {
             SRational(8330, 100),
             SRational(7372, 100),
         ];
-        let result = tiff_tag_to_vignette_coefs(&data);
+        let result = from_fuji_tags(&data);
         assert_eq!(
             result,
             VignetteCorrection([0.06590392, 1.1629808, -3.502386, 4.069807, -1.4535313])

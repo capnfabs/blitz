@@ -3,7 +3,7 @@ use clap::{App, Arg};
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::datagrid::{DataGrid, MutableDataGrid, Size};
+use libraw::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
 use ordered_float::NotNan;
 use std::cmp::min;
 
@@ -55,6 +55,7 @@ fn load_and_maybe_render(img_file: &str, render: bool) {
 }
 
 fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
+    let raf = img;
     let img = &img.render_info();
 
     // Change 14 bit to 16 bit.
@@ -67,11 +68,28 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         MutableDataGrid::new(&mut img_data, Size(img.width as usize, img.height as usize));
     levels::black_sub(&mut img_mdg);
 
+    let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
+
+    let dvg = |x: usize, y: usize, val: u16| {
+        let x = x as i32;
+        let y = y as i32;
+        let w = img.width as i32;
+        let h = img.height as i32;
+        let x = (x - (w / 2)) as f32;
+        let y = (y - (h / 2)) as f32;
+        let pos = (x * x + y * y).sqrt() / 3605.0;
+        devignette.apply_gain(pos, val as f32)
+    };
+
+    for (Position(x, y), v) in img_mdg.iter_pos_mut() {
+        *v = dvg(x, y, *v) as u16
+    }
+
     // hot pixel elimination through a hard-coded filter lol
     let max = img_data
         .iter()
         // TODO: this is hardcoded!
-        //.filter(|v| **v < 6000)
+        .filter(|v| **v < 6000)
         .copied()
         .max()
         .unwrap();

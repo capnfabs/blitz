@@ -242,6 +242,10 @@ impl<'a> ParsedRafFile<'a> {
             raw_data: &self.tiffish.raw_data,
         }
     }
+
+    pub fn vignette_attenuation(&self) -> &[SRational] {
+        &self.tiffish.vignette_attenuation
+    }
 }
 
 #[derive(Debug)]
@@ -251,6 +255,7 @@ struct TiffishData {
     bit_depth: u16,
     black_levels: Vec<u16>,
     white_bal: WhiteBalCoefficients,
+    vignette_attenuation: Vec<SRational>,
     raw_data: Vec<u16>,
 }
 
@@ -349,10 +354,9 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     // The first number looks like x/y axis lengths, then x positions, then y positions.
     let _51: Vec<SRational> = tiff.load_offset_data(hm[&61451]).unwrap();
     let _55: Vec<SRational> = tiff.load_offset_data(hm[&61455]).unwrap();
-    let _56: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
+    let vignette_attentuation: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
     println!("51: {:?}", _51);
     println!("55: {:?}", _55);
-    println!("56: {:?}", _56);
 
     Ok((
         raw,
@@ -363,6 +367,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
             black_levels,
             white_bal: wb,
             raw_data: img_data,
+            vignette_attenuation: vignette_attentuation,
         },
     ))
 }
