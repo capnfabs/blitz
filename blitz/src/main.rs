@@ -10,6 +10,7 @@ use std::cmp::min;
 mod common;
 mod demosaic;
 mod levels;
+mod vignette_correction;
 
 #[allow(unused_imports)]
 use crate::demosaic::{Nearest, Passthru};

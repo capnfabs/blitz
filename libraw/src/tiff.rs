@@ -163,7 +163,16 @@ impl From<u16> for FieldType {
 pub struct Rational(u32, u32);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub struct SRational(i32, i32);
+pub struct SRational(pub i32, pub i32);
+
+impl SRational {
+    pub fn into_f32(self) -> f32 {
+        self.0 as f32 / self.1 as f32
+    }
+    pub fn into_f64(self) -> f64 {
+        self.0 as f64 / self.1 as f64
+    }
+}
 
 pub trait Parseable: Sized {
     fn type_matches(t: FieldType) -> bool;
