@@ -15,7 +15,6 @@ impl VignetteCorrection {
         self.compute_gain(center_distance) * value
     }
     fn compute_gain(&self, center_distance: f32) -> f32 {
-        //assert!(center_distance <= 1f32);
         let [k0, k1, k2, k3, k4] = self.0;
         let r2 = center_distance.powi(2);
         let r4 = r2.powi(2);

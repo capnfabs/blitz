@@ -82,22 +82,30 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     };
 
     for (Position(x, y), v) in img_mdg.iter_pos_mut() {
-        *v = dvg(x, y, *v) as u16
+        *v = dvg(x, y, *v) as u16;
     }
-
-    // hot pixel elimination through a hard-coded filter lol
-    let max = img_data
-        .iter()
-        // TODO: this is hardcoded!
-        .filter(|v| **v < 6000)
-        .copied()
-        .max()
-        .unwrap();
+    let mut h = histogram::Histogram::new();
+    for v in img_mdg.iter_mut() {
+        h.increment(*v as u64).unwrap();
+    }
 
     let img_grid = DataGrid::wrap(&img_data, Size(img.width as usize, img.height as usize));
 
     // Compute scaling params
-    println!("Overall max: {:}", max);
+    println!("Stats!");
+    println!(
+        "Max: {}\n99%: {}\n95%: {}\n75%: {}\n50%: {}\n25%: {}\n05%: {}\n01%: {}\nMin: {}",
+        h.percentile(100.0).unwrap(),
+        h.percentile(99.0).unwrap(),
+        h.percentile(95.0).unwrap(),
+        h.percentile(75.0).unwrap(),
+        h.percentile(50.0).unwrap(),
+        h.percentile(25.0).unwrap(),
+        h.percentile(5.0).unwrap(),
+        h.percentile(1.0).unwrap(),
+        h.percentile(0.0).unwrap(),
+    );
+    let max = h.percentile(99.0).unwrap();
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
     // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
     // how they work.
