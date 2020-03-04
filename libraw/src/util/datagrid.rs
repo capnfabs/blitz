@@ -19,6 +19,14 @@ impl Size {
     pub fn count(&self) -> usize {
         self.0 * self.1
     }
+
+    pub fn encloses(&self, p: Position) -> bool {
+        p.0 < self.0 && p.1 < self.1
+    }
+}
+
+pub trait Sizeable {
+    fn size(&self) -> Size;
 }
 
 impl std::ops::Add<Size> for Position {
@@ -265,12 +273,38 @@ impl<'a, T: Copy> MutableDataGrid<'a, T> {
         }
     }
 
-    pub fn iter_mut(&mut self) -> MutIter<T> {
-        MutIter(self.iter_pos_mut())
+    pub fn iter_pos(&self) -> PosIter<T> {
+        let Position(x_start, y_start) = self.anchor_pos;
+        let Size(data_width, _) = self.data_size;
+        let Size(width, height) = self.size;
+        let x_end = x_start + width;
+        let y_end = y_start + height;
+        let row_skip = data_width - width;
+        let mut iter = self.data.iter();
+        let initial_elem = y_start * data_width + x_start;
+        if initial_elem != 0 {
+            // Skip the first n-1 elements
+            iter.nth(initial_elem - 1);
+        }
+        PosIter {
+            iter,
+            x_start,
+            x_end,
+            row_skip,
+            y_start,
+            y_end,
+            x: x_start,
+            y: y_start,
+            started: false,
+        }
     }
 
-    pub fn size(&self) -> Size {
-        self.size
+    pub fn iter(&self) -> Iter<T> {
+        Iter(self.iter_pos())
+    }
+
+    pub fn iter_mut(&mut self) -> MutIter<T> {
+        MutIter(self.iter_pos_mut())
     }
 }
 
@@ -297,6 +331,12 @@ impl<'a, T: Copy> IndexMut<Position> for MutableDataGrid<'a, T> {
         let Size(data_width, _) = self.data_size;
 
         &mut self.data[data_y * data_width + data_x]
+    }
+}
+
+impl<'a, T: Copy> Sizeable for MutableDataGrid<'a, T> {
+    fn size(&self) -> Size {
+        self.size
     }
 }
 
@@ -337,7 +377,53 @@ impl<'a, T: Copy> Iterator for MutPosIter<'a, T> {
     }
 }
 
+pub struct PosIter<'a, T: Copy> {
+    iter: std::slice::Iter<'a, T>,
+    x_start: usize,
+    x_end: usize,
+    row_skip: usize,
+    y_start: usize,
+    y_end: usize,
+    // The x-y pos of the next value to take.
+    x: usize,
+    y: usize,
+    started: bool,
+}
+
+impl<'a, T: Copy> Iterator for PosIter<'a, T> {
+    type Item = (Position, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.y == self.y_end && self.x == self.x_start {
+            return None;
+        }
+        let pos = Position(self.x - self.x_start, self.y - self.y_start);
+        let val = if self.x == self.x_start && self.started {
+            // Need to skip elements that were there before.
+            self.iter.nth(self.row_skip)
+        } else {
+            self.iter.next()
+        };
+        self.started = true;
+        self.x += 1;
+        if self.x == self.x_end {
+            self.y += 1;
+            self.x = self.x_start;
+        }
+        val.map(|v| (pos, v))
+    }
+}
+
 pub struct MutIter<'a, T: Copy>(MutPosIter<'a, T>);
+pub struct Iter<'a, T: Copy>(PosIter<'a, T>);
+
+impl<'a, T: Copy> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(_, v)| v)
+    }
+}
 
 impl<'a, T: Copy> Iterator for MutIter<'a, T> {
     type Item = &'a mut T;

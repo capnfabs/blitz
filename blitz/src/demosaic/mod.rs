@@ -1,8 +1,9 @@
 use crate::common::Pixel;
-use libraw::util::datagrid::{DataGrid, Offset, Position};
+use libraw::util::datagrid::{DataGrid, MutableDataGrid, Offset, Position, Size, Sizeable};
 use libraw::Color;
 use num_traits::Unsigned;
 use std::marker::PhantomData;
+use std::ops::Index;
 
 const CHECK_ORDER: [Offset; 5] = [
     Offset(0, 0),
@@ -12,8 +13,8 @@ const CHECK_ORDER: [Offset; 5] = [
     Offset(0, -1),
 ];
 
-pub trait Demosaic<T: Copy + Unsigned> {
-    fn demosaic(img_grid: &DataGrid<T>, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<T>;
+pub trait Demosaic<T: Copy + Unsigned, Container: Index<Position, Output = T>> {
+    fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<T>;
 }
 
 fn offset_for_color(mapping: &DataGrid<Color>, color: Color, pos: Position) -> Position {
@@ -47,24 +48,41 @@ pub struct Nearest(PhantomData<u16>);
 #[allow(dead_code)]
 pub struct Passthru(PhantomData<u16>);
 
-impl Demosaic<u16> for Nearest {
-    fn demosaic(img_grid: &DataGrid<u16>, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
+static BLACK: Pixel<u16> = Pixel {
+    red: 0,
+    green: 0,
+    blue: 0,
+};
+
+impl<Container> Demosaic<u16, Container> for Nearest
+where
+    Container: Index<Position, Output = u16> + Sizeable,
+{
+    fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
         let pixel = Position(x, y);
+        let Size(x, y) = img_grid.size();
+        let size = Size(x - 1, y - 1);
+        if !size.encloses(pixel) {
+            return BLACK.clone();
+        }
         let offsets = find_offsets(&mapping, pixel);
         Pixel {
-            red: img_grid.at(offsets[Color::Red.idx()]),
-            green: img_grid.at(offsets[Color::Green.idx()]),
-            blue: img_grid.at(offsets[Color::Blue.idx()]),
+            red: img_grid[offsets[Color::Red.idx()]],
+            green: img_grid[offsets[Color::Green.idx()]],
+            blue: img_grid[offsets[Color::Blue.idx()]],
         }
     }
 }
 
-impl Demosaic<u16> for Passthru {
-    fn demosaic(img_grid: &DataGrid<u16>, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
+impl<Container> Demosaic<u16, Container> for Passthru
+where
+    Container: Index<Position, Output = u16> + Sizeable,
+{
+    fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
         let pos = Position(x as usize, y as usize);
-        let v = img_grid.at(pos);
+        let v = img_grid[pos];
         let color = mapping.at(pos);
         match color {
             Color::Red => Pixel {

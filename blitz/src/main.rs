@@ -1,6 +1,6 @@
 use crate::common::Pixel;
 use clap::{App, Arg};
-use image::{ImageBuffer, ImageFormat};
+use image::{DynamicImage, ImageBuffer, ImageFormat, ImageOutputFormat, Luma};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
 use libraw::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
@@ -15,6 +15,8 @@ mod vignette_correction;
 #[allow(unused_imports)]
 use crate::demosaic::{Nearest, Passthru};
 use demosaic::Demosaic;
+use histogram::Histogram;
+use iterm2::download_file;
 
 mod pathutils;
 
@@ -54,6 +56,36 @@ fn load_and_maybe_render(img_file: &str, render: bool) {
     pathutils::open_preview(&raw_preview_filename);
 }
 
+fn render_histogram(
+    h: &histogram::Histogram,
+    width: u32,
+    height: u32,
+) -> ImageBuffer<Luma<u8>, Vec<u8>> {
+    let max = h.maximum().unwrap() as u32;
+    let step = 100.0 / ((width - 1) as f64);
+
+    let mut buf = ImageBuffer::new(width, height);
+    for bar in 0..width {
+        let val = h.percentile(bar as f64 * step).unwrap() as f32 / max as f32;
+        for i in ((height as f32 * (1.0 - val)) as u32)..height {
+            buf[(bar, i)] = Luma([255u8]);
+        }
+    }
+    buf
+}
+
+fn make_histogram<T, U>(iter: T) -> Histogram
+where
+    T: std::iter::Iterator<Item = U>,
+    U: Into<u64>,
+{
+    let mut h = histogram::Histogram::new();
+    for v in iter {
+        h.increment(v.into()).unwrap();
+    }
+    h
+}
+
 fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let raf = img;
     let img = &img.render_info();
@@ -84,27 +116,21 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     for (Position(x, y), v) in img_mdg.iter_pos_mut() {
         *v = dvg(x, y, *v) as u16;
     }
-    let mut h = histogram::Histogram::new();
-    for v in img_mdg.iter_mut() {
-        h.increment(*v as u64).unwrap();
-    }
 
-    let img_grid = DataGrid::wrap(&img_data, Size(img.width as usize, img.height as usize));
+    //
+    let h = make_histogram(img_mdg.iter().copied());
 
     // Compute scaling params
     println!("Stats!");
-    println!(
-        "Max: {}\n99%: {}\n95%: {}\n75%: {}\n50%: {}\n25%: {}\n05%: {}\n01%: {}\nMin: {}",
-        h.percentile(100.0).unwrap(),
-        h.percentile(99.0).unwrap(),
-        h.percentile(95.0).unwrap(),
-        h.percentile(75.0).unwrap(),
-        h.percentile(50.0).unwrap(),
-        h.percentile(25.0).unwrap(),
-        h.percentile(5.0).unwrap(),
-        h.percentile(1.0).unwrap(),
-        h.percentile(0.0).unwrap(),
-    );
+    {
+        let histogram_rendered = render_histogram(&h, 400, 200);
+        let mut buf: Vec<u8> = Vec::new();
+        let img = DynamicImage::ImageLuma8(histogram_rendered);
+        img.write_to(&mut buf, ImageOutputFormat::PNG).unwrap();
+        download_file(&[("inline", "1")], &buf);
+    }
+    println!();
+
     let max = h.percentile(99.0).unwrap();
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
     // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
@@ -125,7 +151,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
         saturating_scale(
-            Nearest::demosaic(&img_grid, &mapping, x as u16, y as u16),
+            Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16),
             &scale_factors,
         )
         .to_rgb()

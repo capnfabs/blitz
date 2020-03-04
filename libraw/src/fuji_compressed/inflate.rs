@@ -6,7 +6,7 @@ use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
 use crate::util::bitreader::BitReader;
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
+use crate::util::datagrid::{DataGrid, MutableDataGrid, Position, Size, Sizeable};
 use crate::Color;
 use crate::Color::{Blue, Green, Red};
 use itertools::Itertools;

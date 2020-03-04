@@ -1,6 +1,7 @@
 use libraw::Color;
 use num_traits::{Num, Unsigned};
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Pixel<U>
 where
     U: Num + Unsigned,
