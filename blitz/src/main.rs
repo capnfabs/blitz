@@ -74,6 +74,38 @@ fn render_histogram(
     buf
 }
 
+fn render_histogram_weird(h: &histogram::Histogram) {
+    use svg::node::element::path::Data;
+    use svg::node::element::Path;
+    use svg::Document;
+    let mut data = Data::new().move_to((0, 0));
+    let mut last_x = 0;
+    let mut max = 0;
+    for bucket in h {
+        if bucket.value() > 25_000 {
+            break;
+        }
+        let val = bucket.count();
+        if val > max {
+            max = val;
+        }
+        let w = bucket.width();
+        data = data.line_to((last_x + w, val));
+        last_x += w;
+    }
+    let path = Path::new()
+        .set("fill", "none")
+        .set("stroke", "black")
+        .set("stroke-width", 3)
+        .set("d", data);
+
+    let document = Document::new()
+        .set("viewBox", (0, 0, last_x, max))
+        .add(path);
+
+    svg::save("/tmp/hist.svg", &document).unwrap();
+}
+
 fn make_histogram<T, U>(iter: T) -> Histogram
 where
     T: std::iter::Iterator<Item = U>,
@@ -119,6 +151,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     //
     let h = make_histogram(img_mdg.iter().copied());
+    render_histogram_weird(&h);
 
     // Compute scaling params
     println!("Stats!");
