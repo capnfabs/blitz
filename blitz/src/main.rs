@@ -20,6 +20,7 @@ mod vignette_correction;
 use crate::demosaic::{Nearest, Passthru};
 use demosaic::Demosaic;
 use histogram::Histogram;
+use ndarray::Array2;
 
 fn main() {
     let matches = App::new("Blitz")
@@ -84,8 +85,8 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     let mut img_data = img.raw_data.clone();
     let mut img_mdg =
-        MutableDataGrid::new(&mut img_data, Size(img.width as usize, img.height as usize));
-    levels::black_sub(&mut img_mdg);
+        Array2::from_shape_vec((img.width as usize, img.height as usize), img_data).unwrap();
+    levels::black_sub(img_mdg.indexed_iter_mut());
     levels::apply_gamma(&mut img_mdg);
 
     let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());

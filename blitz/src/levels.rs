@@ -1,9 +1,8 @@
 use itertools::Itertools;
-use libraw::util::datagrid::MutableDataGrid;
 
 // TODO: make this actually valid.
-pub fn black_sub(grid: &mut MutableDataGrid<u16>) {
-    for x in grid.iter_mut() {
+pub fn black_sub<'a>(grid: impl Iterator<Item = ((usize, usize), &'a mut u16)>) {
+    for (_, x) in grid {
         *x = x.saturating_sub(1022);
     }
 }
