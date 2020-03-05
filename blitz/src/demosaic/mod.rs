@@ -1,7 +1,7 @@
 use crate::common::Pixel;
-use libraw::util::datagrid::{DataGrid, MutableDataGrid, Offset, Position, Size, Sizeable};
+use libraw::util::datagrid::{DataGrid, Offset, Position, Size, Sizeable};
 use libraw::Color;
-use num_traits::Unsigned;
+use num::Unsigned;
 use std::marker::PhantomData;
 use std::ops::Index;
 

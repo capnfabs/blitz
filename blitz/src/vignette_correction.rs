@@ -70,10 +70,7 @@ pub fn from_fuji_tags(entry: &[SRational]) -> VignetteCorrection {
 
 #[cfg(test)]
 mod test {
-    use crate::vignette_correction::{
-        from_fuji_tags, fuji_tiff_tag_to_vignette_coefs, linear_gain_to_coefs, VignetteCorrection,
-    };
-    use itertools::Itertools;
+    use crate::vignette_correction::{from_fuji_tags, VignetteCorrection};
     use libraw::tiff::SRational;
 
     #[test]

@@ -1,6 +1,7 @@
 use crate::common::Pixel;
+use crate::diagnostics::{render_histogram, TermImage};
 use clap::{App, Arg};
-use image::{DynamicImage, ImageBuffer, ImageFormat, ImageOutputFormat, Luma};
+use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
 use libraw::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
@@ -9,30 +10,32 @@ use std::cmp::min;
 
 mod common;
 mod demosaic;
+mod diagnostics;
+mod histo;
 mod levels;
+mod pathutils;
 mod vignette_correction;
 
 #[allow(unused_imports)]
 use crate::demosaic::{Nearest, Passthru};
 use demosaic::Demosaic;
 use histogram::Histogram;
-use iterm2::download_file;
-
-mod pathutils;
 
 fn main() {
     let matches = App::new("Blitz")
         .arg(Arg::with_name("render").short("r").long("render"))
+        .arg(Arg::with_name("open").long("open"))
         .arg(Arg::with_name("INPUT").required(true).index(1))
         .get_matches();
 
     let input = matches.value_of("INPUT").unwrap();
     let render = matches.occurrences_of("render") == 1;
+    let open = matches.occurrences_of("open") == 1;
 
-    load_and_maybe_render(input, render);
+    load_and_maybe_render(input, render, open);
 }
 
-fn load_and_maybe_render(img_file: &str, render: bool) {
+fn load_and_maybe_render(img_file: &str, render: bool, open: bool) {
     println!("Loading RAW data: native");
     let file = RafFile::open(img_file).unwrap();
     println!("Opened file: {:?}", file);
@@ -53,57 +56,9 @@ fn load_and_maybe_render(img_file: &str, render: bool) {
         .unwrap();
     pathutils::set_readonly(&raw_preview_filename);
     println!("Done saving");
-    pathutils::open_preview(&raw_preview_filename);
-}
-
-fn render_histogram(
-    h: &histogram::Histogram,
-    width: u32,
-    height: u32,
-) -> ImageBuffer<Luma<u8>, Vec<u8>> {
-    let max = h.maximum().unwrap() as u32;
-    let step = 100.0 / ((width - 1) as f64);
-
-    let mut buf = ImageBuffer::new(width, height);
-    for bar in 0..width {
-        let val = h.percentile(bar as f64 * step).unwrap() as f32 / max as f32;
-        for i in ((height as f32 * (1.0 - val)) as u32)..height {
-            buf[(bar, i)] = Luma([255u8]);
-        }
+    if open {
+        pathutils::open_preview(&raw_preview_filename);
     }
-    buf
-}
-
-fn render_histogram_weird(h: &histogram::Histogram) {
-    use svg::node::element::path::Data;
-    use svg::node::element::Path;
-    use svg::Document;
-    let mut data = Data::new().move_to((0, 0));
-    let mut last_x = 0;
-    let mut max = 0;
-    for bucket in h {
-        if bucket.value() > 25_000 {
-            break;
-        }
-        let val = bucket.count();
-        if val > max {
-            max = val;
-        }
-        let w = bucket.width();
-        data = data.line_to((last_x + w, val));
-        last_x += w;
-    }
-    let path = Path::new()
-        .set("fill", "none")
-        .set("stroke", "black")
-        .set("stroke-width", 3)
-        .set("d", data);
-
-    let document = Document::new()
-        .set("viewBox", (0, 0, last_x, max))
-        .add(path);
-
-    svg::save("/tmp/hist.svg", &document).unwrap();
 }
 
 fn make_histogram<T, U>(iter: T) -> Histogram
@@ -131,6 +86,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let mut img_mdg =
         MutableDataGrid::new(&mut img_data, Size(img.width as usize, img.height as usize));
     levels::black_sub(&mut img_mdg);
+    levels::apply_gamma(&mut img_mdg);
 
     let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
 
@@ -149,22 +105,19 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         *v = dvg(x, y, *v) as u16;
     }
 
-    //
-    let h = make_histogram(img_mdg.iter().copied());
-    render_histogram_weird(&h);
+    println!("Percentile chart!");
+    // Percentile chart
+    let values_curve = make_histogram(img_mdg.iter().copied());
+    diagnostics::render_tone_curve(&values_curve, 600, 400).display();
 
-    // Compute scaling params
-    println!("Stats!");
-    {
-        let histogram_rendered = render_histogram(&h, 400, 200);
-        let mut buf: Vec<u8> = Vec::new();
-        let img = DynamicImage::ImageLuma8(histogram_rendered);
-        img.write_to(&mut buf, ImageOutputFormat::PNG).unwrap();
-        download_file(&[("inline", "1")], &buf);
-    }
+    println!();
+    println!("Histogram!");
+    let h = histo::Histo::from_iter(img_mdg.iter().copied());
+    diagnostics::render_histogram(&h, 600, 1000).display();
     println!();
 
-    let max = h.percentile(99.0).unwrap();
+    // Compute scaling params
+    let max = values_curve.percentile(99.0).unwrap();
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
     // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
     // how they work.
@@ -189,6 +142,9 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         )
         .to_rgb()
     });
+    let r = buf.pixels().map(|p| p.0[0] as u16);
+    let h_r = histo::Histo::from_iter(r);
+    render_histogram(&h_r, 200, 256).display();
     println!("Done rendering");
     buf
 }
