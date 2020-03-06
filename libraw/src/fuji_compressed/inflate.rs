@@ -42,11 +42,12 @@ pub fn inflate(
 
     let output = vec![0; img_width * img_height];
     let mut mg = Array2::from_shape_vec((img_width, img_height).set_f(true), output).unwrap();
-    //println!("MG shape 0x1 {}x{}", mg.len_of(Axis(0)), mg.len_of(Axis(1)));
-    let mut chunks = mg.axis_chunks_iter_mut(Axis(0), stripe_width).collect_vec();
+    // Split into 8 vertical stripes of stripe_width.
+    let mut chunks = mg
+        .axis_chunks_iter_mut(HORIZONTAL, stripe_width)
+        .collect_vec();
     chunks
-        //.par_iter_mut()
-        .iter_mut()
+        .par_iter_mut()
         .zip(blocks)
         .enumerate()
         .for_each(|(_block_num, (stripe, block))| {
@@ -64,11 +65,6 @@ pub fn inflate_stripe<T: io::Read>(
     stripe_width: usize,
     output: &mut ndarray::ArrayViewMut2<u16>,
 ) {
-    /*println!(
-        "Stripe shape 0x1 {}x{}",
-        output.len_of(Axis(0)),
-        output.len_of(Axis(1))
-    );*/
     let mut r: BitReader<_> = BitReader::new(reader);
 
     // As per Xtrans matrix, there's a max of 4 green pixels out of every 6, so
@@ -94,6 +90,7 @@ pub fn inflate_stripe<T: io::Read>(
         prev_lines = collect_carry_lines(&results);
         copy_line_to_xtrans(
             color_map,
+            // Get a subslice the width of the entire slice, and 6 pixels high at a time
             &mut output.slice_mut(s![.., line * 6..(line + 1) * 6]),
             results,
         )
@@ -105,15 +102,14 @@ fn copy_line_to_xtrans(
     output: &mut ArrayViewMut2<u16>,
     results: Colored<Vec<Vec<u16>>>,
 ) {
-    /*println!(
-        "Copy line to xtrans shape 0x1 {}x{}",
-        output.len_of(Axis(0)),
-        output.len_of(Axis(1))
-    );*/
     for row_idx in 0..6 {
         let (r, g, b) = results.split();
         let line_colors = Colored::new(&r[row_idx / 2], &g[row_idx], &b[row_idx / 2]);
         map_contiguous_colors_to_xtrans(
+            // This is *extremely* confusing but it actually gets a horizontal row.
+            // column_mut() uses Axis(1) under the hood, which is normally the columns, but because
+            // we're using set_f on the shape, it's flipped around for us.
+            // TODO: file a bug for this.
             &mut output.column_mut(row_idx),
             &line_colors,
             &color_map.subgrid(Position(0, row_idx), Size(6, 1)),
@@ -126,7 +122,6 @@ fn map_contiguous_colors_to_xtrans(
     colors: &Colored<&Vec<u16>>,
     row_color_map: &DataGrid<Color>,
 ) {
-    //println!("len output_row {}", output_row.len());
     for (pos, val) in output_row.iter_mut().enumerate() {
         // TODO: extract into a method, also used in map_xtrans_to_contiguous_colors
         let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
