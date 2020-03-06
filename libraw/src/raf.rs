@@ -314,19 +314,12 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     let img_num_u16 = img_byte_count / 2;
     let img_encoding_type = EncodingType::from(hm[&61449].val_u32().unwrap());
 
-    println!(
-        "img is at {} and length {} with encoding {:?}",
-        img_byte_offset, img_byte_count, img_encoding_type
-    );
-
     let black_levels: Vec<u32> = tiff.load_offset_data(hm[&61450]).unwrap();
     let black_levels: Vec<u16> = black_levels.iter().map(|x| *x as u16).collect();
-    println!("Black levels: {:#?}", black_levels);
 
     // No idea what this one is either; it's 8 numbers, looks wb related
     // because _52[0] and _52[4] == _53[0].
     let _52: Vec<u32> = tiff.load_offset_data(hm[&61452]).unwrap();
-    println!("52: {:#?}", _52);
 
     // Note that tag 61454 had the same values on all the files I tested -
     // not sure what the difference is. DCRAW uses '54 and not '53.
@@ -355,8 +348,6 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     let _51: Vec<SRational> = tiff.load_offset_data(hm[&61451]).unwrap();
     let _55: Vec<SRational> = tiff.load_offset_data(hm[&61455]).unwrap();
     let vignette_attentuation: Vec<SRational> = tiff.load_offset_data(hm[&61456]).unwrap();
-    println!("51: {:?}", _51);
-    println!("55: {:?}", _55);
 
     Ok((
         raw,

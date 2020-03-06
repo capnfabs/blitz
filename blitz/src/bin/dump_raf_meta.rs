@@ -60,7 +60,6 @@ fn enumerate_vals(img_location: &str, output_directory: &str) -> Result<(), Box<
             img_name,
             path.to_str().unwrap()
         );
-        //println!("{}: {:?}", entry.file_name().to_str().unwrap(), tag);
     }
     Ok(())
 }

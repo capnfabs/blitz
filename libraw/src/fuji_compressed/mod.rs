@@ -105,8 +105,6 @@ pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     // TODO: build quantisation tables
     let (i, block_sizes) = block_sizes(i, header.num_blocks)?;
     let (_i, blocks) = read_blocks(i, &block_sizes)?;
-    println!("Compressed: {:#?}", header);
-    println!("Blocks: {:#?}", block_sizes);
     let blocks = blocks.iter().map(|x| Cursor::new(*x)).collect_vec();
     let img_size = Size(header.raw_width as usize, header.raw_height as usize);
     let output = inflate::inflate(

@@ -42,10 +42,8 @@ pub fn inflate(
         .par_iter_mut()
         .zip(blocks)
         .enumerate()
-        .for_each(|(block_num, (stripe, block))| {
-            println!("Processing block {}", block_num);
+        .for_each(|(_block_num, (stripe, block))| {
             inflate_stripe(block, color_map, stripe_width, stripe);
-            println!("Finished block {}", block_num);
         });
     output
 }

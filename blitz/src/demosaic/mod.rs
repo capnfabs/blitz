@@ -1,9 +1,10 @@
 use crate::common::Pixel;
-use libraw::util::datagrid::{DataGrid, Offset, Position, Size, Sizeable};
+use crate::griditer::GridRandomAccess;
+use libraw::util::datagrid;
+use libraw::util::datagrid::{DataGrid, Offset};
 use libraw::Color;
 use num::Unsigned;
 use std::marker::PhantomData;
-use std::ops::Index;
 
 const CHECK_ORDER: [Offset; 5] = [
     Offset(0, 0),
@@ -13,23 +14,25 @@ const CHECK_ORDER: [Offset; 5] = [
     Offset(0, -1),
 ];
 
-pub trait Demosaic<T: Copy + Unsigned, Container: Index<Position, Output = T>> {
+type Position = (usize, usize);
+
+pub trait Demosaic<T: Copy + Unsigned, Container: GridRandomAccess> {
     fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<T>;
 }
 
 fn offset_for_color(mapping: &DataGrid<Color>, color: Color, pos: Position) -> Position {
-    for candidate_pos in CHECK_ORDER.iter().map(|offset| pos + *offset) {
-        if mapping.at(candidate_pos) == color {
+    for candidate_pos in CHECK_ORDER.iter().map(|offset| {
+        let x = pos.0 as i32 + offset.0;
+        let y = pos.1 as i32 + offset.1;
+        assert!(x >= 0);
+        assert!(y >= 0);
+        (x as usize, y as usize)
+    }) {
+        if mapping.at(datagrid::Position(candidate_pos.0, candidate_pos.1)) == color {
             return candidate_pos;
         }
     }
-    let Position(a, b) = pos;
-    if a == 0 || b == 0 {
-        // The edges are kinda messed up, so just return the original position
-        pos
-    } else {
-        panic!("Shouldn't get here")
-    }
+    unreachable!("Should have selected a position already");
 }
 
 fn find_offsets(mapping: &DataGrid<Color>, pos: Position) -> [Position; 3] {
@@ -56,15 +59,13 @@ static BLACK: Pixel<u16> = Pixel {
 
 impl<Container> Demosaic<u16, Container> for Nearest
 where
-    Container: Index<Position, Output = u16> + Sizeable,
+    Container: GridRandomAccess,
 {
     fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
         let x = x as usize;
         let y = y as usize;
-        let pixel = Position(x, y);
-        let Size(x, y) = img_grid.size();
-        let size = Size(x - 1, y - 1);
-        if !size.encloses(pixel) {
+        let pixel = (x, y);
+        if x >= 6047 || y >= 4037 || x == 0 || y == 0 {
             return BLACK.clone();
         }
         let offsets = find_offsets(&mapping, pixel);
@@ -78,11 +79,12 @@ where
 
 impl<Container> Demosaic<u16, Container> for Passthru
 where
-    Container: Index<Position, Output = u16> + Sizeable,
+    Container: GridRandomAccess,
 {
     fn demosaic(img_grid: &Container, mapping: &DataGrid<Color>, x: u16, y: u16) -> Pixel<u16> {
-        let pos = Position(x as usize, y as usize);
-        let v = img_grid[pos];
+        let pos = datagrid::Position(x as usize, y as usize);
+
+        let v = img_grid[(x as usize, y as usize)];
         let color = mapping.at(pos);
         match color {
             Color::Red => Pixel {

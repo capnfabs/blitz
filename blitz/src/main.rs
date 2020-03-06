@@ -1,10 +1,10 @@
 use crate::common::Pixel;
-use crate::diagnostics::{render_histogram, TermImage};
+use crate::diagnostics::TermImage;
 use clap::{App, Arg};
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::datagrid::{DataGrid, MutableDataGrid, Size};
+use libraw::util::datagrid::{DataGrid, Size};
 use ordered_float::NotNan;
 use std::cmp::min;
 
@@ -21,6 +21,7 @@ mod vignette_correction;
 use crate::demosaic::{Nearest, Passthru};
 use demosaic::Demosaic;
 use histogram::Histogram;
+use ndarray::prelude::*;
 use ndarray::Array2;
 
 fn main() {
@@ -79,14 +80,14 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let raf = img;
     let img = &img.render_info();
 
-    // Change 14 bit to 16 bit.
-    //let img_data: Vec<u16> = img_data.iter().copied().map(|v| v << 2).collect();
-
     let mapping = DataGrid::wrap(&img.xtrans_mapping, Size(6, 6));
 
     let img_data = img.raw_data.clone();
-    let mut img_mdg =
-        Array2::from_shape_vec((img.width as usize, img.height as usize), img_data).unwrap();
+    let mut img_mdg = Array2::from_shape_vec(
+        (img.width as usize, img.height as usize).set_f(true),
+        img_data,
+    )
+    .unwrap();
     levels::black_sub(img_mdg.indexed_iter_mut());
     levels::apply_gamma(img_mdg.indexed_iter_mut());
 
@@ -118,11 +119,6 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     diagnostics::render_histogram(&h, 600, 1000).display();
     println!();
 
-    let img_mdg = MutableDataGrid::new(
-        img_mdg.as_slice_mut().unwrap(),
-        Size(img.width as usize, img.height as usize),
-    );
-
     // Compute scaling params
     let max = values_curve.percentile(99.0).unwrap();
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
@@ -149,9 +145,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         )
         .to_rgb()
     });
-    let r = buf.pixels().map(|p| p.0[0] as u16);
-    let h_r = histo::Histo::from_iter(r);
-    render_histogram(&h_r, 200, 256).display();
+
     println!("Done rendering");
     buf
 }
