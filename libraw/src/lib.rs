@@ -14,6 +14,9 @@ extern crate derivative;
 #[macro_use]
 extern crate data_encoding_macro;
 
+#[macro_use]
+extern crate ndarray;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Color {
     Red,

@@ -6,15 +6,19 @@ use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
 use crate::util::bitreader::BitReader;
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, MutableDataGrid, Position, Size, Sizeable};
+use crate::util::datagrid::{DataGrid, Position, Size};
 use crate::Color;
 use crate::Color::{Blue, Green, Red};
 use itertools::Itertools;
 use std::io;
 
+use ndarray::{Array2, ArrayViewMut1, ArrayViewMut2, Axis, ShapeBuilder};
 use rayon::prelude::*;
 use std::io::Cursor;
 use std::iter::repeat;
+
+static VERTICAL: Axis = Axis(1);
+static HORIZONTAL: Axis = Axis(0);
 
 // TODO: this should be moved to a testing utilities file.
 pub fn make_color_map() -> DataGrid<'static, Color> {
@@ -35,17 +39,20 @@ pub fn inflate(
     color_map: &DataGrid<Color>,
 ) -> Vec<u16> {
     let Size(img_width, img_height) = img_size;
-    // Output image, should be 6000x4000x
-    let mut output = vec![0; img_width * img_height];
-    let mut mg = MutableDataGrid::new(&mut output, img_size);
-    mg.vertical_stripes_mut(stripe_width)
-        .par_iter_mut()
+
+    let output = vec![0; img_width * img_height];
+    let mut mg = Array2::from_shape_vec((img_width, img_height).set_f(true), output).unwrap();
+    //println!("MG shape 0x1 {}x{}", mg.len_of(Axis(0)), mg.len_of(Axis(1)));
+    let mut chunks = mg.axis_chunks_iter_mut(Axis(0), stripe_width).collect_vec();
+    chunks
+        //.par_iter_mut()
+        .iter_mut()
         .zip(blocks)
         .enumerate()
         .for_each(|(_block_num, (stripe, block))| {
             inflate_stripe(block, color_map, stripe_width, stripe);
         });
-    output
+    mg.into_raw_vec()
 }
 
 pub fn inflate_stripe<T: io::Read>(
@@ -55,8 +62,13 @@ pub fn inflate_stripe<T: io::Read>(
     // case of the rightmost stripe, which is skinnier for output but
     // decompresses using the same size.
     stripe_width: usize,
-    output: &mut MutableDataGrid<u16>,
+    output: &mut ndarray::ArrayViewMut2<u16>,
 ) {
+    /*println!(
+        "Stripe shape 0x1 {}x{}",
+        output.len_of(Axis(0)),
+        output.len_of(Axis(1))
+    );*/
     let mut r: BitReader<_> = BitReader::new(reader);
 
     // As per Xtrans matrix, there's a max of 4 green pixels out of every 6, so
@@ -74,7 +86,7 @@ pub fn inflate_stripe<T: io::Read>(
 
     let mut gradients = ([[Grad::default(); 41]; 3], [[Grad::default(); 41]; 3]);
 
-    let Size(_, stripe_height) = output.size();
+    let stripe_height = output.len_of(Axis(1));
     let num_lines = stripe_height / 6;
 
     for line in 0..num_lines {
@@ -82,7 +94,7 @@ pub fn inflate_stripe<T: io::Read>(
         prev_lines = collect_carry_lines(&results);
         copy_line_to_xtrans(
             color_map,
-            &mut output.subgrid(Position(0, line * 6), Size(output.size().0, 6)),
+            &mut output.slice_mut(s![.., line * 6..(line + 1) * 6]),
             results,
         )
     }
@@ -90,14 +102,19 @@ pub fn inflate_stripe<T: io::Read>(
 
 fn copy_line_to_xtrans(
     color_map: &DataGrid<Color>,
-    output: &mut MutableDataGrid<u16>,
+    output: &mut ArrayViewMut2<u16>,
     results: Colored<Vec<Vec<u16>>>,
 ) {
+    /*println!(
+        "Copy line to xtrans shape 0x1 {}x{}",
+        output.len_of(Axis(0)),
+        output.len_of(Axis(1))
+    );*/
     for row_idx in 0..6 {
         let (r, g, b) = results.split();
         let line_colors = Colored::new(&r[row_idx / 2], &g[row_idx], &b[row_idx / 2]);
         map_contiguous_colors_to_xtrans(
-            output.row_mut(row_idx),
+            &mut output.column_mut(row_idx),
             &line_colors,
             &color_map.subgrid(Position(0, row_idx), Size(6, 1)),
         );
@@ -105,10 +122,11 @@ fn copy_line_to_xtrans(
 }
 
 fn map_contiguous_colors_to_xtrans(
-    output_row: &mut [u16],
+    output_row: &mut ArrayViewMut1<u16>,
     colors: &Colored<&Vec<u16>>,
     row_color_map: &DataGrid<Color>,
 ) {
+    //println!("len output_row {}", output_row.len());
     for (pos, val) in output_row.iter_mut().enumerate() {
         // TODO: extract into a method, also used in map_xtrans_to_contiguous_colors
         let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
