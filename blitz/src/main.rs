@@ -4,7 +4,7 @@ use clap::{App, Arg};
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::datagrid::{DataGrid, Size};
+use libraw::util::datagrid::{DataGrid, MutableDataGrid, Size};
 use ordered_float::NotNan;
 use std::cmp::min;
 
@@ -117,6 +117,11 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let h = histo::Histo::from_iter(img_mdg.iter().copied());
     diagnostics::render_histogram(&h, 600, 1000).display();
     println!();
+
+    let img_mdg = MutableDataGrid::new(
+        img_mdg.as_slice_mut().unwrap(),
+        Size(img.width as usize, img.height as usize),
+    );
 
     // Compute scaling params
     let max = values_curve.percentile(99.0).unwrap();
