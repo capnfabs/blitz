@@ -4,13 +4,14 @@ use clap::{App, Arg};
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::datagrid::{DataGrid, MutableDataGrid, Position, Size};
+use libraw::util::datagrid::{DataGrid, Size};
 use ordered_float::NotNan;
 use std::cmp::min;
 
 mod common;
 mod demosaic;
 mod diagnostics;
+mod griditer;
 mod histo;
 mod levels;
 mod pathutils;
@@ -83,11 +84,11 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     let mapping = DataGrid::wrap(&img.xtrans_mapping, Size(6, 6));
 
-    let mut img_data = img.raw_data.clone();
+    let img_data = img.raw_data.clone();
     let mut img_mdg =
         Array2::from_shape_vec((img.width as usize, img.height as usize), img_data).unwrap();
     levels::black_sub(img_mdg.indexed_iter_mut());
-    levels::apply_gamma(&mut img_mdg);
+    levels::apply_gamma(img_mdg.indexed_iter_mut());
 
     let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
 
@@ -102,7 +103,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         devignette.apply_gain(pos, val as f32)
     };
 
-    for (Position(x, y), v) in img_mdg.iter_pos_mut() {
+    for ((x, y), v) in img_mdg.indexed_iter_mut() {
         *v = dvg(x, y, *v) as u16;
     }
 
