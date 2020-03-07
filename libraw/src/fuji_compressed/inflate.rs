@@ -6,13 +6,13 @@ use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
 use crate::util::bitreader::BitReader;
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, Position, Size};
 use crate::Color;
 use crate::Color::{Blue, Green, Red};
 use itertools::Itertools;
 use std::io;
 
-use ndarray::{Array2, ArrayViewMut1, ArrayViewMut2, Axis, ShapeBuilder};
+use crate::griditer::{FilterMap, IndexWrapped1};
+use ndarray::{Array2, ArrayView1, ArrayViewMut1, ArrayViewMut2, Axis, ShapeBuilder};
 use rayon::prelude::*;
 use std::io::Cursor;
 use std::iter::repeat;
@@ -21,25 +21,25 @@ static VERTICAL: Axis = Axis(1);
 static HORIZONTAL: Axis = Axis(0);
 
 // TODO: this should be moved to a testing utilities file.
-pub fn make_color_map() -> DataGrid<'static, Color> {
-    DataGrid::wrap(
-        &[
+pub fn make_color_map() -> FilterMap {
+    Array2::from_shape_vec(
+        (6, 6).set_f(true),
+        vec![
             Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
             Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green, Red,
             Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
         ],
-        Size(6, 6),
     )
+    .unwrap()
 }
 
 pub fn inflate(
-    img_size: Size,
+    img_width: usize,
+    img_height: usize,
     stripe_width: usize,
     blocks: Vec<Cursor<&[u8]>>,
-    color_map: &DataGrid<Color>,
+    color_map: &FilterMap,
 ) -> Vec<u16> {
-    let Size(img_width, img_height) = img_size;
-
     let output = vec![0; img_width * img_height];
     let mut mg = Array2::from_shape_vec((img_width, img_height).set_f(true), output).unwrap();
     // Split into 8 vertical stripes of stripe_width.
@@ -56,9 +56,9 @@ pub fn inflate(
     mg.into_raw_vec()
 }
 
-pub fn inflate_stripe<T: io::Read>(
-    reader: T,
-    color_map: &DataGrid<Color>,
+pub fn inflate_stripe<Reader: io::Read>(
+    reader: Reader,
+    color_map: &FilterMap,
     // It _is_ possible to get this from output.size(), but it breaks in the
     // case of the rightmost stripe, which is skinnier for output but
     // decompresses using the same size.
@@ -82,7 +82,7 @@ pub fn inflate_stripe<T: io::Read>(
 
     let mut gradients = ([[Grad::default(); 41]; 3], [[Grad::default(); 41]; 3]);
 
-    let stripe_height = output.len_of(Axis(1));
+    let stripe_height = output.len_of(VERTICAL);
     let num_lines = stripe_height / 6;
 
     for line in 0..num_lines {
@@ -98,7 +98,7 @@ pub fn inflate_stripe<T: io::Read>(
 }
 
 fn copy_line_to_xtrans(
-    color_map: &DataGrid<Color>,
+    color_map: &FilterMap,
     output: &mut ArrayViewMut2<u16>,
     results: Colored<Vec<Vec<u16>>>,
 ) {
@@ -112,7 +112,7 @@ fn copy_line_to_xtrans(
             // TODO: file a bug for this.
             &mut output.column_mut(row_idx),
             &line_colors,
-            &color_map.subgrid(Position(0, row_idx), Size(6, 1)),
+            &color_map.column(row_idx),
         );
     }
 }
@@ -120,12 +120,12 @@ fn copy_line_to_xtrans(
 fn map_contiguous_colors_to_xtrans(
     output_row: &mut ArrayViewMut1<u16>,
     colors: &Colored<&Vec<u16>>,
-    row_color_map: &DataGrid<Color>,
+    row_color_map: &ArrayView1<Color>,
 ) {
     for (pos, val) in output_row.iter_mut().enumerate() {
         // TODO: extract into a method, also used in map_xtrans_to_contiguous_colors
         let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
-        let color = row_color_map.at(Position(pos, 0));
+        let color = *row_color_map.index_wrapped(pos);
         *val = colors[color][squashed_idx];
     }
 }
@@ -301,9 +301,10 @@ fn sample_to_delta(sample: Sample) -> i32 {
 mod test {
     use crate::fuji_compressed::inflate::{inflate_stripe, make_color_map};
     use crate::fuji_compressed::process_common::UNSET;
-    use crate::util::datagrid::{MutableDataGrid, Size};
 
     use itertools::Itertools;
+    use ndarray::prelude::*;
+    use ndarray::Array2;
     use std::convert::TryInto;
 
     const STRIPE_WIDTH: usize = 768;
@@ -319,16 +320,18 @@ mod test {
             .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
             .collect_vec();
 
-        let mut actual_data = vec![UNSET; STRIPE_WIDTH * NUM_LINES * 6];
-        let mut output = MutableDataGrid::new(&mut actual_data, Size(STRIPE_WIDTH, NUM_LINES * 6));
+        let actual_data = vec![UNSET; STRIPE_WIDTH * NUM_LINES * 6];
+        let mut output =
+            Array2::from_shape_vec((STRIPE_WIDTH, NUM_LINES * 6).set_f(true), actual_data).unwrap();
 
         inflate_stripe(
             &mut COMPRESSED,
             &make_color_map(),
             STRIPE_WIDTH,
-            &mut output,
+            &mut output.slice_mut(s![.., ..]),
         );
-        assert_eq!(actual_data.len(), expected.len());
-        assert_eq!(actual_data, expected.as_slice());
+        let outdata = output.into_raw_vec();
+        assert_eq!(outdata.len(), expected.len());
+        assert_eq!(outdata, expected.as_slice());
     }
 }

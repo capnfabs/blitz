@@ -1,5 +1,5 @@
-use crate::griditer::GridIterator;
 use itertools::Itertools;
+use libraw::griditer::GridIterator;
 
 // TODO: make this actually valid.
 pub fn black_sub<'a>(grid: impl GridIterator<'a>) {

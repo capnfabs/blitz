@@ -28,9 +28,6 @@ num = "0.2.1"
 resvg = {version = "0.9.0",  features = ["cairo-backend"] }
 cairo-rs = "0.8.1"
 
-[[bin]]
-name = "squashraf"
-path = "src/bin/squashraf.rs"
 
 [[bin]]
 name = "tiffheaderdump"

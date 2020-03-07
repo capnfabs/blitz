@@ -1,6 +1,7 @@
 #![allow(clippy::just_underscores_and_digits, clippy::too_many_arguments)]
 
 pub mod fuji_compressed;
+pub mod griditer;
 pub mod raf;
 pub mod tiff;
 pub mod util;

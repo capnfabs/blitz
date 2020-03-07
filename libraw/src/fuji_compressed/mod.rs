@@ -13,7 +13,6 @@ use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::sequence::tuple;
 use nom::IResult;
 
-use crate::util::datagrid::Size;
 pub use compress::compress;
 use itertools::Itertools;
 use std::io::Cursor;
@@ -106,9 +105,9 @@ pub fn load_fuji_compressed(input: &[u8]) -> IResult<I, Vec<u16>> {
     let (i, block_sizes) = block_sizes(i, header.num_blocks)?;
     let (_i, blocks) = read_blocks(i, &block_sizes)?;
     let blocks = blocks.iter().map(|x| Cursor::new(*x)).collect_vec();
-    let img_size = Size(header.raw_width as usize, header.raw_height as usize);
     let output = inflate::inflate(
-        img_size,
+        header.raw_width as usize,
+        header.raw_height as usize,
         header.block_width as usize,
         blocks,
         &inflate::make_color_map(),

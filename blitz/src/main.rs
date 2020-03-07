@@ -4,14 +4,12 @@ use clap::{App, Arg};
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use libraw::util::datagrid::{DataGrid, Size};
 use ordered_float::NotNan;
 use std::cmp::min;
 
 mod common;
 mod demosaic;
 mod diagnostics;
-mod griditer;
 mod histo;
 mod levels;
 mod pathutils;
@@ -80,7 +78,7 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let raf = img;
     let img = &img.render_info();
 
-    let mapping = DataGrid::wrap(&img.xtrans_mapping, Size(6, 6));
+    let mapping = Array2::from_shape_vec((6, 6).set_f(true), img.xtrans_mapping.clone()).unwrap();
 
     let img_data = img.raw_data.clone();
     let mut img_mdg = Array2::from_shape_vec(
