@@ -1,26 +1,16 @@
-use crate::common::Pixel;
-use crate::diagnostics::TermImage;
+use blitz::common::Pixel;
+use blitz::demosaic::{Demosaic, Nearest};
+use blitz::diagnostics::TermImage;
+use blitz::{diagnostics, histo, levels, pathutils, vignette_correction};
 use clap::{App, Arg};
+use histogram::Histogram;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
-use ordered_float::NotNan;
-use std::cmp::min;
-
-mod common;
-mod demosaic;
-mod diagnostics;
-mod histo;
-mod levels;
-mod pathutils;
-mod vignette_correction;
-
-#[allow(unused_imports)]
-use crate::demosaic::{Nearest, Passthru};
-use demosaic::Demosaic;
-use histogram::Histogram;
 use ndarray::prelude::*;
 use ndarray::Array2;
+use ordered_float::NotNan;
+use std::cmp::min;
 
 fn main() {
     let matches = App::new("Blitz")
