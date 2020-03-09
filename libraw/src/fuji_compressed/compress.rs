@@ -1,16 +1,18 @@
 use itertools::Itertools;
 
 use crate::fuji_compressed::bytecounter::ByteCounter;
+use crate::fuji_compressed::inflate::{HORIZONTAL, VERTICAL};
 use crate::fuji_compressed::process_common::{
     collect_carry_lines, compute_weighted_average_even, flatten, grad_and_weighted_avg_even,
     grad_and_weighted_avg_odd, is_interpolated, load_even_coefficients, split_at, PROCESS, UNSET,
 };
 use crate::fuji_compressed::sample::{Grad, Gradients, Sample};
 use crate::fuji_compressed::zip_with_offset::zip_with_offset;
+use crate::griditer::{FilterMap, IndexWrapped1};
 use crate::util::colored::Colored;
-use crate::util::datagrid::{DataGrid, Position, Size};
 use crate::Color;
 use bitbit::BitWriter;
+use ndarray::{ArrayView1, ArrayView2};
 use std::io;
 use std::iter::repeat;
 
@@ -23,8 +25,8 @@ const REQUIRED_CAPACITY: usize = STRIPE_WIDTH * 4 / 6;
 // spot, using the Defined Layout.
 fn map_xtrans_to_contiguous_colors(
     colors: &mut Colored<&mut Vec<u16>>,
-    row: &[u16],
-    row_map: &DataGrid<Color>,
+    row: &ArrayView1<u16>,
+    row_map: &ArrayView1<Color>,
 ) {
     for (_, x) in colors.iter() {
         assert_eq!(x.len(), REQUIRED_CAPACITY);
@@ -35,7 +37,7 @@ fn map_xtrans_to_contiguous_colors(
         // produces the sequence 0,1,1,2,3,3,4,5,5...
         // TODO: write why this works
         let squashed_idx = (((pos as i32 - 1) * 2).div_euclid(3) + 1) as usize;
-        let color = row_map.at(Position(pos, 0));
+        let &color = row_map.index_wrapped(pos);
         colors[color][squashed_idx] = *val;
     }
 }
@@ -52,20 +54,19 @@ fn fill_blanks_in_row(row: &mut [u16], rprev: &[u16], rprevprev: &[u16]) {
     }
 }
 
-pub fn compress<T: io::Write>(img_grid: DataGrid<u16>, cm: &DataGrid<Color>, mut data: T) {
+pub fn compress<T: io::Write>(img_grid: ArrayView2<u16>, cm: &FilterMap, mut data: T) {
+    let chunks = img_grid
+        .axis_chunks_iter(HORIZONTAL, STRIPE_WIDTH)
+        .collect_vec();
     // TODO: loop this.
-    let stripe = img_grid.subgrid(
-        Position(0, 0),
-        Size(STRIPE_WIDTH, img_grid.size().1 as usize),
-    );
     let mut output = BitOutputSampleTarget::wrap(&mut data);
-    process_stripe(&stripe, &cm, &mut output);
+    process_stripe(&chunks[0], &cm, &mut output);
     output.finalize_block().unwrap();
 }
 
 fn process_stripe<T: SampleTarget>(
-    stripe: &DataGrid<u16>,
-    color_map: &DataGrid<Color>,
+    stripe: &ArrayView2<u16>,
+    color_map: &FilterMap,
     output: &mut T,
 ) {
     let mut prev_lines = {
@@ -88,10 +89,10 @@ fn process_stripe<T: SampleTarget>(
     // - looking up a gradient from those quantised values.
     let mut gradients = ([[Grad::default(); 41]; 3], [[Grad::default(); 41]; 3]);
 
-    let num_lines = stripe.size().1 / 6;
+    let num_lines = stripe.len_of(VERTICAL) / 6;
 
     for line in 0..num_lines {
-        let line = stripe.subgrid(Position(0, 6 * line), Size(STRIPE_WIDTH, 6));
+        let line = stripe.slice(s![.., line * 6..(line + 1) * 6]);
         let results = process_line(&line, &color_map, &mut gradients, &prev_lines, output);
         prev_lines = collect_carry_lines(&results);
     }
@@ -156,8 +157,8 @@ impl<'a, T: std::io::Write> SampleTarget for BitOutputSampleTarget<'a, T> {
 
 // A 'line' is a [strip-width]x6 row of data. This corresponds to the Xtrans 6x6 grid, repeated [strip-width]/6 times horizontally.
 fn process_line<T: SampleTarget>(
-    line: &DataGrid<u16>,
-    color_map: &DataGrid<Color>,
+    line: &ArrayView2<u16>,
+    color_map: &FilterMap,
     gradients: &mut (Gradients, Gradients),
     carry_results: &Colored<Vec<Vec<u16>>>,
     output: &mut T,
@@ -178,8 +179,8 @@ fn process_line<T: SampleTarget>(
             Colored::new(&mut r[row_idx / 2], &mut g[row_idx], &mut b[row_idx / 2]);
         map_xtrans_to_contiguous_colors(
             &mut line_colors,
-            line.row(row_idx),
-            &color_map.subgrid(Position(0, row_idx), Size(6, 1)),
+            &line.column(row_idx),
+            &color_map.column(row_idx),
         );
     }
 
@@ -350,11 +351,10 @@ fn fill_blanks_in_line(
 
 #[cfg(test)]
 mod test {
-
     use crate::fuji_compressed::compress::{process_stripe, BitOutputSampleTarget, STRIPE_WIDTH};
-    use crate::util::datagrid::{DataGrid, Size};
-    use crate::Color::{Blue, Green, Red};
+    use crate::fuji_compressed::inflate::make_color_map;
     use itertools::Itertools;
+    use ndarray::{Array2, ShapeBuilder};
     use std::convert::TryInto;
     use std::io::Cursor;
 
@@ -368,19 +368,16 @@ mod test {
             .map(|x| u16::from_le_bytes(x.try_into().unwrap()))
             .collect_vec();
 
-        let stripe = DataGrid::wrap(&input, Size(STRIPE_WIDTH, input.len() / STRIPE_WIDTH));
-        let color_map = DataGrid::wrap(
-            &[
-                Green, Green, Red, Green, Green, Blue, Green, Green, Blue, Green, Green, Red, Blue,
-                Red, Green, Red, Blue, Green, Green, Green, Blue, Green, Green, Red, Green, Green,
-                Red, Green, Green, Blue, Red, Blue, Green, Blue, Red, Green,
-            ],
-            Size(6, 6),
-        );
+        let stripe = Array2::from_shape_vec(
+            (STRIPE_WIDTH, input.len() / STRIPE_WIDTH).set_f(true),
+            input,
+        )
+        .unwrap();
+        let color_map = &make_color_map();
         let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
 
         let mut output = BitOutputSampleTarget::wrap(&mut data);
-        process_stripe(&stripe, &color_map, &mut output);
+        process_stripe(&stripe.slice(s![.., ..]), &color_map, &mut output);
         output.finalize_block().unwrap();
         let output = data.into_inner();
         // TODO: prevent printing on failure; but dump somewhere useful instead.

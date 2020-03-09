@@ -17,8 +17,8 @@ use rayon::prelude::*;
 use std::io::Cursor;
 use std::iter::repeat;
 
-static VERTICAL: Axis = Axis(1);
-static HORIZONTAL: Axis = Axis(0);
+pub static VERTICAL: Axis = Axis(1);
+pub static HORIZONTAL: Axis = Axis(0);
 
 // TODO: this should be moved to a testing utilities file.
 pub fn make_color_map() -> FilterMap {
