@@ -3,7 +3,7 @@ name = "blitz"
 version = "0.1.0"
 authors = ["Fabian Tamp <fabian.tamp@gmail.com>"]
 edition = "2018"
-#default-run = "blitz"
+default-run = "blitz"
 
 [dependencies]
 clap = "2.33.0"

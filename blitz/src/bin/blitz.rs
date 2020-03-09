@@ -6,6 +6,7 @@ use clap::{App, Arg};
 use histogram::Histogram;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
+use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 use ndarray::prelude::*;
 use ndarray::Array2;
@@ -76,25 +77,10 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         img_data,
     )
     .unwrap();
-    levels::black_sub(img_mdg.indexed_iter_mut());
+    levels::black_sub(img_mdg.indexed_iter_mut(), &img.black_levels);
     levels::apply_gamma(img_mdg.indexed_iter_mut());
 
-    let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
-
-    let dvg = |x: usize, y: usize, val: u16| {
-        let x = x as i32;
-        let y = y as i32;
-        let w = img.width as i32;
-        let h = img.height as i32;
-        let x = (x - (w / 2)) as f32;
-        let y = (y - (h / 2)) as f32;
-        let pos = (x * x + y * y).sqrt() / 3605.0;
-        devignette.apply_gain(pos, val as f32)
-    };
-
-    for ((x, y), v) in img_mdg.indexed_iter_mut() {
-        *v = dvg(x, y, *v) as u16;
-    }
+    devignette(raf, img.width, img.height, &mut img_mdg.indexed_iter_mut());
 
     println!("Percentile chart!");
     // Percentile chart
@@ -136,6 +122,26 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
     println!("Done rendering");
     buf
+}
+
+// TODO: make some changes such that this works better:
+// - Define a 'VignetteCorrection' to be from center to the edge of the RAW data
+//   so that we can get rid of the hardcoded 3605.
+fn devignette<'a>(raf: &ParsedRafFile, width: u16, height: u16, img: impl GridIterator<'a>) {
+    let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
+    let dvg = |x: usize, y: usize, val: u16| {
+        let x = x as i32;
+        let y = y as i32;
+        let w = width as i32;
+        let h = height as i32;
+        let x = (x - (w / 2)) as f32;
+        let y = (y - (h / 2)) as f32;
+        let pos = (x * x + y * y).sqrt() / 3605.0;
+        devignette.apply_gain(pos, val as f32)
+    };
+    for ((x, y), v) in img {
+        *v = dvg(x, y, *v) as u16;
+    }
 }
 
 fn saturating_scale(p: Pixel<u16>, scale_factors: &[u16]) -> Pixel<u16> {

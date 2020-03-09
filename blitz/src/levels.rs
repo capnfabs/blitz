@@ -1,10 +1,10 @@
 use itertools::Itertools;
-use libraw::griditer::GridIterator;
+use libraw::griditer::{BlackPattern, GridIterator, IndexWrapped2};
 
-// TODO: make this actually valid.
-pub fn black_sub<'a>(grid: impl GridIterator<'a>) {
-    for (_, x) in grid {
-        *x = x.saturating_sub(1022);
+pub fn black_sub<'a>(grid: impl GridIterator<'a>, black_pattern: &BlackPattern) {
+    for (pos, x) in grid {
+        let &black = black_pattern.index_wrapped(pos.0, pos.1);
+        *x = x.saturating_sub(black);
     }
 }
 

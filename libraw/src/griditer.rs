@@ -20,6 +20,7 @@ pub trait GridRandomAccess: Index<(usize, usize), Output = u16> + Sizeable {}
 impl<T> GridRandomAccess for T where T: Index<(usize, usize), Output = u16> + Sizeable {}
 
 pub type FilterMap = Array2<Color>;
+pub type BlackPattern = Array2<u16>;
 
 pub trait IndexWrapped1<T> {
     fn index_wrapped(&self, a: usize) -> &T;

@@ -1,9 +1,11 @@
+use crate::griditer::BlackPattern;
 use crate::raf::EncodingType::{Compressed, Uncompressed, Unknown};
 use crate::raf::Tag::XTransMapping;
 use crate::tiff::{IfdEntry, SRational};
 use crate::{fuji_compressed, tiff, Color};
 use itertools::Itertools;
 use memmap::Mmap;
+use ndarray::{Array2, ShapeBuilder};
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::all_consuming;
 use nom::error::ParseError;
@@ -232,11 +234,13 @@ impl<'a> ParsedRafFile<'a> {
             .collect();
         // This is _backwards_ in the file.
         xtrans.reverse();
+        let black_levels =
+            Array2::from_shape_vec((6, 6).set_f(true), self.tiffish.black_levels.clone()).unwrap();
         RenderInfo {
             width: self.tiffish.width,
             height: self.tiffish.height,
             bit_depth: self.tiffish.bit_depth,
-            black_levels: self.tiffish.black_levels.clone(),
+            black_levels,
             white_bal: self.tiffish.white_bal.clone(),
             xtrans_mapping: xtrans,
             raw_data: &self.tiffish.raw_data,
@@ -263,7 +267,7 @@ pub struct RenderInfo<'a> {
     pub width: Width,
     pub height: Height,
     pub bit_depth: u16,
-    pub black_levels: Vec<u16>,
+    pub black_levels: BlackPattern,
     pub white_bal: WhiteBalCoefficients,
     pub xtrans_mapping: Vec<Color>,
     pub raw_data: &'a Vec<u16>,
