@@ -2,7 +2,7 @@ use blitz::common::Pixel;
 use blitz::demosaic::{Demosaic, Nearest};
 use blitz::diagnostics::TermImage;
 use blitz::{diagnostics, histo, levels, pathutils, vignette_correction};
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches};
 use histogram::Histogram;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
@@ -13,6 +13,12 @@ use ndarray::Array2;
 use ordered_float::NotNan;
 use std::cmp::min;
 
+struct Flags {
+    render: bool,
+    open: bool,
+    stats: bool,
+}
+
 fn main() {
     let matches = App::new("Blitz")
         .arg(Arg::with_name("render").short("r").long("render"))
@@ -21,13 +27,23 @@ fn main() {
         .get_matches();
 
     let input = matches.value_of("INPUT").unwrap();
-    let render = matches.occurrences_of("render") == 1;
-    let open = matches.occurrences_of("open") == 1;
+    let flags = make_flags(&matches);
 
-    load_and_maybe_render(input, render, open);
+    load_and_maybe_render(input, &flags);
 }
 
-fn load_and_maybe_render(img_file: &str, render: bool, open: bool) {
+fn make_flags(matches: &ArgMatches) -> Flags {
+    let render = matches.occurrences_of("render") == 1;
+    let open = matches.occurrences_of("open") == 1;
+    let stats = matches.occurrences_of("stats") == 1;
+    Flags {
+        render,
+        open,
+        stats,
+    }
+}
+
+fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     println!("Loading RAW data: native");
     let file = RafFile::open(img_file).unwrap();
     println!("Opened file: {:?}", file);
@@ -36,19 +52,19 @@ fn load_and_maybe_render(img_file: &str, render: bool, open: bool) {
 
     println!("Parsed.");
 
-    if !render {
+    if !flags.render {
         return;
     }
 
     let raw_preview_filename = pathutils::get_output_path("native");
-    let rendered = render_raw(&details);
+    let rendered = render_raw(&details, flags.stats);
     println!("Saving");
     rendered
         .save_with_format(&raw_preview_filename, ImageFormat::TIFF)
         .unwrap();
     pathutils::set_readonly(&raw_preview_filename);
     println!("Done saving");
-    if open {
+    if flags.open {
         pathutils::open_preview(&raw_preview_filename);
     }
 }
@@ -65,7 +81,20 @@ where
     h
 }
 
-fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
+fn print_stats(value_iter: impl Iterator<Item = u16> + Clone) {
+    println!("Percentile chart!");
+    // Percentile chart
+    let values_curve = make_histogram(value_iter.clone());
+    diagnostics::render_tone_curve(&values_curve, 600, 400).display();
+
+    println!();
+    println!("Histogram!");
+    let h = histo::Histo::from_iter(value_iter);
+    diagnostics::render_histogram(&h, 600, 1000).display();
+    println!();
+}
+
+fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     let raf = img;
     let img = &img.render_info();
 
@@ -77,23 +106,18 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         img_data,
     )
     .unwrap();
-    levels::black_sub(img_mdg.indexed_iter_mut(), &img.black_levels);
-    levels::apply_gamma(img_mdg.indexed_iter_mut());
 
     devignette(raf, img.width, img.height, &mut img_mdg.indexed_iter_mut());
 
-    println!("Percentile chart!");
-    // Percentile chart
-    let values_curve = make_histogram(img_mdg.iter().copied());
-    diagnostics::render_tone_curve(&values_curve, 600, 400).display();
+    levels::black_sub(img_mdg.indexed_iter_mut(), &img.black_levels);
+    levels::apply_gamma(img_mdg.indexed_iter_mut());
 
-    println!();
-    println!("Histogram!");
-    let h = histo::Histo::from_iter(img_mdg.iter().copied());
-    diagnostics::render_histogram(&h, 600, 1000).display();
-    println!();
+    if output_stats {
+        print_stats(img_mdg.iter().copied());
+    }
 
     // Compute scaling params
+    let values_curve = make_histogram(img_mdg.iter().copied());
     let max = values_curve.percentile(99.0).unwrap();
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
     // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
@@ -103,14 +127,13 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     let wb = img.white_bal;
     let scale_factors =
         make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32, 0.0]);
-    println!("scale_factors: {:?}", scale_factors);
+
     let scale_factors: Vec<f32> = scale_factors
         .iter()
         .map(|val| val * (std::u16::MAX as f32) / max as f32)
         .collect();
-    println!("scale_factors: {:?}", scale_factors);
+
     let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
-    println!("scale_factors: {:?}", scale_factors);
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
         saturating_scale(
@@ -119,6 +142,8 @@ fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
         )
         .to_rgb()
     });
+    // TODO: Colorspace conversion
+    // Camera -> XYZ -> sRGB
 
     println!("Done rendering");
     buf
