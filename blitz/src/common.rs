@@ -4,7 +4,7 @@ use num::{Num, Unsigned};
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Pixel<U>
 where
-    U: Num + Unsigned,
+    U: Num,
 {
     pub red: U,
     pub green: U,

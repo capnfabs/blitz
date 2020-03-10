@@ -329,6 +329,10 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     // The last val in each set corresponds to "Standard Light A" and "D65" in the LightSource TIFF tag https://www.awaresystems.be/imaging/tiff/tifftags/privateifd/exif/lightsource.html
     // What's weird about this is you probs only need an X/Y, you don't need three values.
     // but I guess the first one in each case is kinda meaningless.
+    // BOTH the DNG spec + libraw talk about having camspace -> XYZ conversion matrix that's per-model,
+    // and then a calibration matrix for tuning (in DNG, it's the CameraCalibration tags, in Libraw,
+    // it's the colorinfo.ccm field)
+    // Once I zeroed these out and converted to DNG, the CameraCalibration tags had been removed.
     let _52: Vec<u32> = tiff.load_offset_data(hm[&61452]).unwrap();
 
     // Note that tag 61454 had the same values on all the files I tested -

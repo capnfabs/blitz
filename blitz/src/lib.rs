@@ -1,3 +1,4 @@
+pub mod camera_specific_junk;
 pub mod common;
 pub mod demosaic;
 pub mod diagnostics;

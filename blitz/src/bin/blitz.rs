@@ -8,9 +8,13 @@ use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
+extern crate nalgebra as na;
+use blitz::camera_specific_junk::cam_xyz;
+use na::{Matrix3, Vector3};
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
+use palette::Srgb;
 use std::cmp::min;
 
 struct Flags {
@@ -94,6 +98,20 @@ fn print_stats(value_iter: impl Iterator<Item = u16> + Clone) {
     println!();
 }
 
+fn cam_to_srgb(matrix: &Matrix3<f32>, px: &Pixel<f32>) -> image::Rgb<u8> {
+    let cam = Vector3::new(px.red, px.green, px.blue);
+    let matrix = matrix.normalize();
+    let xyz: Vector3<f32> = matrix * cam;
+    if let &[x, y, z] = xyz.as_slice() {
+        let xyz = palette::Xyz::new(x, y, z);
+        let srgb: Srgb = xyz.into();
+        let (r, g, b) = srgb.into_components();
+        image::Rgb([(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8])
+    } else {
+        unreachable!("Should map");
+    }
+}
+
 fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     let raf = img;
     let img = &img.render_info();
@@ -110,7 +128,7 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     devignette(raf, img.width, img.height, &mut img_mdg.indexed_iter_mut());
 
     levels::black_sub(img_mdg.indexed_iter_mut(), &img.black_levels);
-    levels::apply_gamma(img_mdg.indexed_iter_mut());
+    //levels::apply_gamma(img_mdg.indexed_iter_mut());
 
     if output_stats {
         print_stats(img_mdg.iter().copied());
@@ -125,28 +143,48 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
 
     // Let's do some WB.
     let wb = img.white_bal;
-    let scale_factors =
-        make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32, 0.0]);
+    let scale_factors = make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32]);
 
-    let scale_factors: Vec<f32> = scale_factors
-        .iter()
-        .map(|val| val * (std::u16::MAX as f32) / max as f32)
-        .collect();
+    // now rescale such that everything will be between zero and 1
+    //let scale_factors: Vec<f32> = scale_factors.iter().map(|val| val / max as f32).collect();
 
-    let scale_factors: Vec<u16> = scale_factors.iter().copied().map(|v| v as u16).collect();
+    let matrix = cam_xyz();
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
-        saturating_scale(
-            Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16),
-            &scale_factors,
-        )
-        .to_rgb()
+        let demo = Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16);
+        let pixel = Pixel {
+            red: clamp(demo.red as f32 / max as f32),
+            green: clamp(demo.green as f32 / max as f32),
+            blue: clamp(demo.blue as f32 / max as f32),
+        };
+        let pixel = Pixel {
+            red: pixel.red * scale_factors[0],
+            green: pixel.green * scale_factors[1],
+            blue: pixel.blue * scale_factors[2],
+        };
+        assert!(pixel.red >= 0.0 && pixel.red <= 1.0);
+        assert!(pixel.green >= 0.0 && pixel.green <= 1.0);
+        assert!(pixel.blue >= 0.0 && pixel.blue <= 1.0);
+        // Camera -> XYZ -> sRGB
+        cam_to_srgb(&matrix, &pixel)
     });
-    // TODO: Colorspace conversion
-    // Camera -> XYZ -> sRGB
 
     println!("Done rendering");
     buf
+}
+
+fn clamp(val: f32) -> f32 {
+    let min = 0.0;
+    let max = 1.0;
+    assert!(min <= max);
+    let mut x = val;
+    if x < min {
+        x = min;
+    }
+    if x > max {
+        x = max;
+    }
+    x
 }
 
 // TODO: make some changes such that this works better:
@@ -183,17 +221,17 @@ fn saturating_scale(p: Pixel<u16>, scale_factors: &[u16]) -> Pixel<u16> {
     }
 }
 
-/// Returns whitebalance coefficients normalized such that the smallest is 1
-fn make_normalized_wb_coefs(coefs: [f32; 4]) -> [f32; 3] {
+/// Returns whitebalance coefficients normalized such that the largest is 1
+fn make_normalized_wb_coefs(coefs: [f32; 3]) -> [f32; 3] {
     println!("coefs {:?}", coefs);
-    let minval = coefs
+    let maxval = coefs
         .iter()
         .cloned()
         .filter(|v| *v != 0.0)
         .map_into::<NotNan<f32>>()
-        .min()
+        .max()
         .unwrap()
         .into_inner();
-    println!("coefs min {:?}", minval);
-    [coefs[0] / minval, coefs[1] / minval, coefs[2] / minval]
+    println!("coefs max {:?}", maxval);
+    [coefs[0] / maxval, coefs[1] / maxval, coefs[2] / maxval]
 }
