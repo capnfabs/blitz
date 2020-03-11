@@ -15,7 +15,6 @@ use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
 use palette::Srgb;
-use std::cmp::min;
 
 struct Flags {
     render: bool,
@@ -204,20 +203,6 @@ fn devignette<'a>(raf: &ParsedRafFile, width: u16, height: u16, img: impl GridIt
     };
     for ((x, y), v) in img {
         *v = dvg(x, y, *v) as u16;
-    }
-}
-
-fn saturating_scale(p: Pixel<u16>, scale_factors: &[u16]) -> Pixel<u16> {
-    Pixel {
-        red: min(p.red as u32 * scale_factors[0] as u32, std::u16::MAX as u32) as u16,
-        green: min(
-            p.green as u32 * scale_factors[1] as u32,
-            std::u16::MAX as u32,
-        ) as u16,
-        blue: min(
-            p.blue as u32 * scale_factors[2] as u32,
-            std::u16::MAX as u32,
-        ) as u16,
     }
 }
 

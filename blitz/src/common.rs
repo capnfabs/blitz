@@ -1,5 +1,5 @@
 use libraw::Color;
-use num::{Num, Unsigned};
+use num::Num;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Pixel<U>
