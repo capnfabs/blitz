@@ -17,7 +17,7 @@ pub trait TermImage {
 
 impl TermImage for DynamicImage {
     fn draw_to<W: std::io::Write>(&self, writer: &mut W) {
-        self.write_to(writer, ImageOutputFormat::PNG).unwrap();
+        self.write_to(writer, ImageOutputFormat::Png).unwrap();
     }
 }
 

@@ -14,7 +14,7 @@ use na::{Matrix3, Vector3};
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
-use palette::Srgb;
+use palette::{LinSrgb, Srgb};
 
 struct Flags {
     render: bool,
@@ -63,7 +63,7 @@ fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     let rendered = render_raw(&details, flags.stats);
     println!("Saving");
     rendered
-        .save_with_format(&raw_preview_filename, ImageFormat::TIFF)
+        .save_with_format(&raw_preview_filename, ImageFormat::Tiff)
         .unwrap();
     pathutils::set_readonly(&raw_preview_filename);
     println!("Done saving");
@@ -100,10 +100,9 @@ fn print_stats(value_iter: impl Iterator<Item = u16> + Clone) {
 fn cam_to_srgb(matrix: &Matrix3<f32>, px: &Pixel<f32>) -> image::Rgb<u8> {
     let cam = Vector3::new(px.red, px.green, px.blue);
     let matrix = matrix.normalize();
-    let xyz: Vector3<f32> = matrix * cam;
-    if let &[x, y, z] = xyz.as_slice() {
-        let xyz = palette::Xyz::new(x, y, z);
-        let srgb: Srgb = xyz.into();
+    let rgb: Vector3<f32> = matrix * cam;
+    if let &[r, g, b] = rgb.as_slice() {
+        let srgb: Srgb = palette::Srgb::from_linear(LinSrgb::new(r, g, b)).into_format();
         let (r, g, b) = srgb.into_components();
         image::Rgb([(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8])
     } else {
@@ -148,6 +147,7 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     //let scale_factors: Vec<f32> = scale_factors.iter().map(|val| val / max as f32).collect();
 
     let matrix = cam_xyz();
+    println!("converted: {:?}", matrix);
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
         let demo = Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16);
