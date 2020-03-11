@@ -33,6 +33,11 @@ pub fn cam_xyz() -> CamXyz {
     );
     let cam_from_rgb = cam_from_xyz * xyz_from_rgb_linear;
     dump_mat("cam_from_rgb", &cam_from_rgb);
-    let rgb_from_cam = cam_from_rgb.try_inverse().unwrap();
-    rgb_from_cam.normalize()
+    // line norm
+    let rows_normalized: Vec<_> = cam_from_rgb.row_iter().map(|row| row / row.sum()).collect();
+    let line_norm = Matrix3::from_rows(&rows_normalized);
+    dump_mat("cam_from_rgb_normie", &line_norm);
+    let rgb_from_cam = line_norm.pseudo_inverse(0.00001).unwrap().transpose();
+    dump_mat("rgb_from_cam", &rgb_from_cam);
+    rgb_from_cam
 }

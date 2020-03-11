@@ -9,7 +9,7 @@ use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::cam_xyz;
+use blitz::camera_specific_junk::{cam_xyz, dump_mat};
 use na::{Matrix3, Vector3};
 use ndarray::prelude::*;
 use ndarray::Array2;
@@ -147,7 +147,6 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     //let scale_factors: Vec<f32> = scale_factors.iter().map(|val| val / max as f32).collect();
 
     let matrix = cam_xyz();
-    println!("converted: {:?}", matrix);
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
         let demo = Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16);
