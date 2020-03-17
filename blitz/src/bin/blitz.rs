@@ -9,12 +9,11 @@ use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::{cam_xyz, dump_mat};
-use na::{Matrix3, Vector3};
+use blitz::camera_specific_junk::cam_xyz;
+use blitz::levels::cam_to_srgb;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
-use palette::{LinSrgb, Srgb};
 
 struct Flags {
     render: bool,
@@ -95,19 +94,6 @@ fn print_stats(value_iter: impl Iterator<Item = u16> + Clone) {
     let h = histo::Histo::from_iter(value_iter);
     diagnostics::render_histogram(&h, 600, 1000).display();
     println!();
-}
-
-fn cam_to_srgb(matrix: &Matrix3<f32>, px: &Pixel<f32>) -> image::Rgb<u8> {
-    let cam = Vector3::new(px.red, px.green, px.blue);
-    let matrix = matrix.normalize();
-    let rgb: Vector3<f32> = matrix * cam;
-    if let &[r, g, b] = rgb.as_slice() {
-        let srgb: Srgb = palette::Srgb::from_linear(LinSrgb::new(r, g, b)).into_format();
-        let (r, g, b) = srgb.into_components();
-        image::Rgb([(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8])
-    } else {
-        unreachable!("Should map");
-    }
 }
 
 fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {

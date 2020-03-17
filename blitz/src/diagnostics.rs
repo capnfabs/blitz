@@ -12,6 +12,7 @@ pub trait TermImage {
         let mut buf: Vec<u8> = Vec::new();
         self.draw_to(&mut buf);
         download_file(&[("inline", "1")], &buf).unwrap();
+        println!()
     }
 }
 

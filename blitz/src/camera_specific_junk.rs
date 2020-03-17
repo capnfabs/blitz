@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use nalgebra::Matrix3;
 
-type CamXyz = nalgebra::Matrix3<f32>;
+pub type ColorspaceMatrix = nalgebra::Matrix3<f32>;
 
 pub fn dump_mat(label: &str, val: &Matrix3<f32>) {
     println!("{}: ", label);
@@ -16,7 +16,7 @@ pub fn dump_mat(label: &str, val: &Matrix3<f32>) {
     }
 }
 
-pub fn cam_xyz() -> CamXyz {
+pub fn cam_rgb_linear() -> ColorspaceMatrix {
     // Value from libraw
     #[rustfmt::skip]
     let cam_from_xyz = Matrix3::new(
@@ -40,4 +40,19 @@ pub fn cam_xyz() -> CamXyz {
     let rgb_from_cam = line_norm.pseudo_inverse(0.00001).unwrap().transpose();
     dump_mat("rgb_from_cam", &rgb_from_cam);
     rgb_from_cam
+}
+
+pub fn cam_xyz() -> ColorspaceMatrix {
+    // I'm pretty sure I lifted this from an intermediate step in libraw.
+    Matrix3::new(
+        0.53416154,
+        0.41342894,
+        0.05240952,
+        0.16269031,
+        1.01245195,
+        -0.17514226,
+        0.02199286,
+        -0.23344274,
+        1.21144988,
+    )
 }
