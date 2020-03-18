@@ -2,7 +2,7 @@ use crate::common::Pixel;
 use itertools::Itertools;
 use libraw::griditer::{BlackPattern, GridIterator, IndexWrapped2};
 use nalgebra::{Matrix3, Vector3};
-use palette::{LinSrgb, Srgb};
+use palette::Srgb;
 
 pub fn black_sub<'a>(grid: impl GridIterator<'a>, black_pattern: &BlackPattern) {
     for (pos, x) in grid {
