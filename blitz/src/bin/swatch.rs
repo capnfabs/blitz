@@ -1,4 +1,6 @@
-use blitz::camera_specific_junk::{cam_xyz, xyz_from_rgblin};
+use blitz::camera_specific_junk::{
+    cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz, xyz_from_rgblin, ColorspaceMatrix,
+};
 use blitz::common::Pixel;
 use blitz::diagnostics::TermImage;
 use blitz::levels::cam_to_srgb;
@@ -79,17 +81,10 @@ fn cmd_gradients(opts: &ArgMatches) {
         make_for_fixed_z(axis_size, &matrix, &path, z);
     }
 }
-/*
-enum SourceSpaceTransform {
-    CamMatrix,
-    SrgbLinearMatrix,
-    SrgbPaletteLib,
-}
-*/
-fn sst_cam_matrix(input: (f32, f32, f32)) -> Xyz {
+
+fn sst_internal_from_matrix(input: (f32, f32, f32), matrix: ColorspaceMatrix) -> Xyz {
     let (r, g, b) = input;
     let cam_rgb = Vector3::new(r, g, b);
-    let matrix = cam_xyz();
     let xyz = matrix * cam_rgb;
     if let &[x, y, z] = xyz.as_slice() {
         Xyz::new(x, y, z)
@@ -98,20 +93,25 @@ fn sst_cam_matrix(input: (f32, f32, f32)) -> Xyz {
     }
 }
 
+fn sst_cam_matrix(input: (f32, f32, f32)) -> Xyz {
+    sst_internal_from_matrix(input, cam_xyz())
+}
+
 fn sst_palette_srgb(input: (f32, f32, f32)) -> Xyz {
     let (r, g, b) = input;
     Srgb::new(r, g, b).into()
 }
 
 fn sst_rgb_matrix(input: (f32, f32, f32)) -> Xyz {
-    let (r, g, b) = input;
-    let matrix = xyz_from_rgblin();
-    let xyz = matrix * Vector3::new(r, g, b);
-    if let &[x, y, z] = xyz.as_slice() {
-        Xyz::new(x, y, z)
-    } else {
-        unreachable!("xyz always three elems")
-    }
+    sst_internal_from_matrix(input, xyz_from_rgblin())
+}
+
+fn sst_dng_cam1_to_xyz(input: (f32, f32, f32)) -> Xyz {
+    sst_internal_from_matrix(input, dng_cam1_to_xyz())
+}
+
+fn sst_dng_cam2_to_xyz(input: (f32, f32, f32)) -> Xyz {
+    sst_internal_from_matrix(input, dng_cam2_to_xyz())
 }
 
 fn cmd_xy(opts: &ArgMatches) {
@@ -125,6 +125,8 @@ fn cmd_xy(opts: &ArgMatches) {
         "srgb_palette" => sst_palette_srgb,
         "srgb_matrix" => sst_rgb_matrix,
         "camrgb" => sst_cam_matrix,
+        "dngcamfwd1" => sst_dng_cam1_to_xyz,
+        "dngcamfwd2" => sst_dng_cam2_to_xyz,
         _ => panic!("lol no"),
     };
     let (img, unmappable_frac) = render_xy_chart(render_function, size, sample_count);
