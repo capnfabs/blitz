@@ -1,4 +1,4 @@
-use blitz::camera_specific_junk::cam_xyz;
+use blitz::camera_specific_junk::{cam_xyz, xyz_from_rgblin};
 use blitz::common::Pixel;
 use blitz::diagnostics::TermImage;
 use blitz::levels::cam_to_srgb;
@@ -6,8 +6,7 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use image::{DynamicImage, ImageBuffer, Luma};
 use itertools::iproduct;
 use nalgebra::Vector3;
-use palette::white_point::D65;
-use palette::Xyz;
+use palette::{Srgb, Xyz};
 use std::fs::create_dir_all;
 use std::path::Path;
 
@@ -36,7 +35,12 @@ fn main() {
                     Arg::with_name("Sample Count")
                         .long("samples")
                         .short("n")
-                        .default_value("125000000"),
+                        .default_value("15000000"),
+                )
+                .arg(
+                    Arg::with_name("Source Space")
+                        .long("source")
+                        .default_value("srgb_palette"),
                 ),
         )
         .get_matches();
@@ -75,19 +79,64 @@ fn cmd_gradients(opts: &ArgMatches) {
         make_for_fixed_z(axis_size, &matrix, &path, z);
     }
 }
+/*
+enum SourceSpaceTransform {
+    CamMatrix,
+    SrgbLinearMatrix,
+    SrgbPaletteLib,
+}
+*/
+fn sst_cam_matrix(input: (f32, f32, f32)) -> Xyz {
+    let (r, g, b) = input;
+    let cam_rgb = Vector3::new(r, g, b);
+    let matrix = cam_xyz();
+    let xyz = matrix * cam_rgb;
+    if let &[x, y, z] = xyz.as_slice() {
+        Xyz::new(x, y, z)
+    } else {
+        unreachable!("xyz always three elems")
+    }
+}
+
+fn sst_palette_srgb(input: (f32, f32, f32)) -> Xyz {
+    let (r, g, b) = input;
+    Srgb::new(r, g, b).into()
+}
+
+fn sst_rgb_matrix(input: (f32, f32, f32)) -> Xyz {
+    let (r, g, b) = input;
+    let matrix = xyz_from_rgblin();
+    let xyz = matrix * Vector3::new(r, g, b);
+    if let &[x, y, z] = xyz.as_slice() {
+        Xyz::new(x, y, z)
+    } else {
+        unreachable!("xyz always three elems")
+    }
+}
 
 fn cmd_xy(opts: &ArgMatches) {
-    let matrix = cam_xyz();
     let size = opts.value_of("Axis Size").unwrap().parse().unwrap();
     let sample_count = opts.value_of("Sample Count").unwrap().parse().unwrap();
+    let source_space = opts.value_of("Source Space").unwrap();
     println!("Generating chroma XY chart with {} samples", sample_count);
-    let (img, unmappable_frac) = render_xy_chart(&matrix, size, sample_count);
+
+    // TODO: use an enum for this.
+    let render_function = match source_space {
+        "srgb_palette" => sst_palette_srgb,
+        "srgb_matrix" => sst_rgb_matrix,
+        "camrgb" => sst_cam_matrix,
+        _ => panic!("lol no"),
+    };
+    let (img, unmappable_frac) = render_xy_chart(render_function, size, sample_count);
     img.display();
-    println!("{:.2}% of values not mappable", unmappable_frac * 100.0);
+    println!(
+        "{:.2}% of values not mappable to XY space",
+        unmappable_frac * 100.0
+    );
 }
 
 pub fn render_xy_chart(
-    matrix: &nalgebra::Matrix3<f32>,
+    source_space_transform: fn((f32, f32, f32)) -> Xyz,
     axis_size: u32,
     sample_count: u32,
 ) -> (impl TermImage, f32) {
@@ -103,31 +152,23 @@ pub fn render_xy_chart(
         let red = r as f32 / (samples_per_axis - 1) as f32;
         let green = g as f32 / (samples_per_axis - 1) as f32;
         let blue = b as f32 / (samples_per_axis - 1) as f32;
-        let cam = Vector3::new(red, green, blue);
-        // Such that they sum to 1
-        let cam = cam.normalize();
-        let xyz: Vector3<f32> = matrix * cam;
-        if let &[x, y, z] = xyz.as_slice() {
-            if x >= 0.0 && y >= 0.0 && z >= 0.0 && x <= 1.0 && y <= 1.0 && z <= 1.0 {
-                let x_img = (x * axis_size as f32) as u32;
-                let y_img = (y * axis_size as f32) as u32;
-                buf[(x_img, axis_size - 1 - y_img)] = Luma([255u8]);
-            } else {
-                unmappable += 1;
-            }
+        let xyz = source_space_transform((red, green, blue));
+        let (x, y, z) = xyz.into_components();
+        let sum = x + y + z;
+        let x = x / sum;
+        let y = y / sum;
+        let z = z / sum;
+
+        if x >= 0.0 && y >= 0.0 && z >= 0.0 && x < 1.0 && y < 1.0 {
+            let x_img = (x * axis_size as f32) as u32;
+            let y_img = (y * axis_size as f32) as u32;
+            buf[(x_img, axis_size - 1 - y_img)] = Luma([255u8]);
         } else {
-            unreachable!("Should map");
+            unmappable += 1;
         }
     }
     (
         DynamicImage::ImageLuma8(buf),
         unmappable as f32 / sample_count as f32,
     )
-}
-
-pub fn normalize_xyz(xyz: Xyz<D65, f32>) -> (f32, f32) {
-    // Input vector must be normalized
-    let (x, y, z) = xyz.into();
-    let inverse_z = 1.0 / z;
-    (x / inverse_z, y / inverse_z)
 }

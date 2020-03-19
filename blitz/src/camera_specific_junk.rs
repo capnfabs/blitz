@@ -25,13 +25,7 @@ pub fn cam_rgb_linear() -> ColorspaceMatrix {
          -666.0,  1479.0,  5235.0,
     ) / 10_000.0;
 
-    #[rustfmt::skip]
-    let xyz_from_rgb_linear = Matrix3::new(
-        0.412453, 0.357580, 0.180423, 
-        0.212671, 0.715160, 0.072169, 
-        0.019334, 0.119193, 0.950227,
-    );
-    let cam_from_rgb = cam_from_xyz * xyz_from_rgb_linear;
+    let cam_from_rgb = cam_from_xyz * xyz_from_rgblin();
     dump_mat("cam_from_rgb", &cam_from_rgb);
     // line norm
     let rows_normalized: Vec<_> = cam_from_rgb.row_iter().map(|row| row / row.sum()).collect();
@@ -42,6 +36,27 @@ pub fn cam_rgb_linear() -> ColorspaceMatrix {
     rgb_from_cam
 }
 
+pub fn xyz_from_rgblin() -> ColorspaceMatrix {
+    #[rustfmt::skip]
+    let x = Matrix3::new(
+        0.412453, 0.357580, 0.180423,
+        0.212671, 0.715160, 0.072169,
+        0.019334, 0.119193, 0.950227,
+    );
+    x
+}
+
+pub fn rgblin_from_xyz() -> ColorspaceMatrix {
+    #[rustfmt::skip]
+    let x = Matrix3::new(
+         3.2406, -1.5372, -0.4986,
+         -0.989,  1.8758,  0.0415,
+         0.0557, -0.2040,  1.0570,
+    );
+    x
+}
+
+// TODO: I think this is cam -> xyz conversion
 pub fn cam_xyz() -> ColorspaceMatrix {
     // I'm pretty sure I lifted this from an intermediate step in libraw.
     Matrix3::new(
