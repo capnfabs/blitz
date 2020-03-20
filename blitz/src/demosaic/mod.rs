@@ -59,6 +59,7 @@ where
         let x = x as usize;
         let y = y as usize;
         let pixel = (x, y);
+        // TODO: don't hardcode this
         if x >= 6047 || y >= 4037 || x == 0 || y == 0 {
             return BLACK.clone();
         }

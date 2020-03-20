@@ -1,3 +1,4 @@
+use crate::SourceSpaces::{CamRgb, DngCamFwd1, DngCamFwd2, RgbLinearMatrix, SrgbPalette};
 use blitz::camera_specific_junk::{
     cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz, xyz_from_rgblin, ColorspaceMatrix,
 };
@@ -26,7 +27,7 @@ fn main() {
                 .arg(Arg::with_name("Output Directory").required(true).index(1)),
         )
         .subcommand(
-            SubCommand::with_name("xy")
+            SubCommand::with_name("chromaplot")
                 .arg(
                     Arg::with_name("Axis Size")
                         .short("s")
@@ -45,12 +46,70 @@ fn main() {
                         .default_value("srgb_palette"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("xy")
+                .arg(
+                    Arg::with_name("Source Space")
+                        .long("source")
+                        .default_value("camrgb"),
+                )
+                .arg(
+                    Arg::with_name("Values")
+                        .required(true)
+                        .min_values(3)
+                        .max_values(3)
+                        .index(1),
+                ),
+        )
         .get_matches();
 
     match matches.subcommand() {
         ("gradients", Some(opts)) => cmd_gradients(opts),
+        ("chromaplot", Some(opts)) => cmd_chromaplot(opts),
         ("xy", Some(opts)) => cmd_xy(opts),
         _ => unreachable!("Must match subcommand"),
+    }
+}
+
+enum SourceSpaces {
+    SrgbPalette,
+    RgbLinearMatrix,
+    CamRgb,
+    DngCamFwd1,
+    DngCamFwd2,
+}
+
+type MappingFunc = fn(f32, f32, f32) -> Xyz;
+
+impl SourceSpaces {
+    pub fn from_name(name: &str) -> Option<SourceSpaces> {
+        match name {
+            "srgb_palette" => Some(SrgbPalette),
+            "srgb_matrix" => Some(RgbLinearMatrix),
+            "camrgb" => Some(CamRgb),
+            "dngcamfwd1" => Some(DngCamFwd1),
+            "dngcamfwd2" => Some(DngCamFwd2),
+            _ => None,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            SrgbPalette => "srgb_palette",
+            RgbLinearMatrix => "srgb_matrix",
+            CamRgb => "camrgb",
+            DngCamFwd1 => "dngcamfwd1",
+            DngCamFwd2 => "dngcamfwd2",
+        }
+    }
+    pub fn mapping_func(&self) -> MappingFunc {
+        match self {
+            SrgbPalette => sst_palette_srgb,
+            RgbLinearMatrix => sst_rgb_matrix,
+            CamRgb => sst_cam_matrix,
+            DngCamFwd1 => sst_dng_cam1_to_xyz,
+            DngCamFwd2 => sst_dng_cam2_to_xyz,
+        }
     }
 }
 
@@ -82,8 +141,7 @@ fn cmd_gradients(opts: &ArgMatches) {
     }
 }
 
-fn sst_internal_from_matrix(input: (f32, f32, f32), matrix: ColorspaceMatrix) -> Xyz {
-    let (r, g, b) = input;
+fn sst_internal_from_matrix(r: f32, g: f32, b: f32, matrix: ColorspaceMatrix) -> Xyz {
     let cam_rgb = Vector3::new(r, g, b);
     let xyz = matrix * cam_rgb;
     if let &[x, y, z] = xyz.as_slice() {
@@ -93,42 +151,51 @@ fn sst_internal_from_matrix(input: (f32, f32, f32), matrix: ColorspaceMatrix) ->
     }
 }
 
-fn sst_cam_matrix(input: (f32, f32, f32)) -> Xyz {
-    sst_internal_from_matrix(input, cam_xyz())
+fn sst_cam_matrix(r: f32, g: f32, b: f32) -> Xyz {
+    sst_internal_from_matrix(r, g, b, cam_xyz())
 }
 
-fn sst_palette_srgb(input: (f32, f32, f32)) -> Xyz {
-    let (r, g, b) = input;
+fn sst_palette_srgb(r: f32, g: f32, b: f32) -> Xyz {
     Srgb::new(r, g, b).into()
 }
 
-fn sst_rgb_matrix(input: (f32, f32, f32)) -> Xyz {
-    sst_internal_from_matrix(input, xyz_from_rgblin())
+fn sst_rgb_matrix(r: f32, g: f32, b: f32) -> Xyz {
+    sst_internal_from_matrix(r, g, b, xyz_from_rgblin())
 }
 
-fn sst_dng_cam1_to_xyz(input: (f32, f32, f32)) -> Xyz {
-    sst_internal_from_matrix(input, dng_cam1_to_xyz())
+fn sst_dng_cam1_to_xyz(r: f32, g: f32, b: f32) -> Xyz {
+    sst_internal_from_matrix(r, g, b, dng_cam1_to_xyz())
 }
 
-fn sst_dng_cam2_to_xyz(input: (f32, f32, f32)) -> Xyz {
-    sst_internal_from_matrix(input, dng_cam2_to_xyz())
+fn sst_dng_cam2_to_xyz(r: f32, g: f32, b: f32) -> Xyz {
+    sst_internal_from_matrix(r, g, b, dng_cam2_to_xyz())
 }
 
 fn cmd_xy(opts: &ArgMatches) {
+    let source_space = opts.value_of("Source Space").unwrap();
+    let render_function = SourceSpaces::from_name(source_space)
+        .map(|x| x.mapping_func())
+        .expect("Got invalid source matrix");
+
+    let components: Vec<f32> = opts
+        .values_of("Values")
+        .unwrap()
+        .map(|x| x.parse().unwrap())
+        .collect();
+
+    let val = render_function(components[0], components[1], components[2]);
+    println!("X: {}\nY: {}\nZ: {}", val.x, val.y, val.z);
+}
+
+fn cmd_chromaplot(opts: &ArgMatches) {
     let size = opts.value_of("Axis Size").unwrap().parse().unwrap();
     let sample_count = opts.value_of("Sample Count").unwrap().parse().unwrap();
     let source_space = opts.value_of("Source Space").unwrap();
     println!("Generating chroma XY chart with {} samples", sample_count);
 
-    // TODO: use an enum for this.
-    let render_function = match source_space {
-        "srgb_palette" => sst_palette_srgb,
-        "srgb_matrix" => sst_rgb_matrix,
-        "camrgb" => sst_cam_matrix,
-        "dngcamfwd1" => sst_dng_cam1_to_xyz,
-        "dngcamfwd2" => sst_dng_cam2_to_xyz,
-        _ => panic!("lol no"),
-    };
+    let render_function = SourceSpaces::from_name(source_space)
+        .expect("Invalid source space")
+        .mapping_func();
     let (img, unmappable_frac) = render_xy_chart(render_function, size, sample_count);
     img.display();
     println!(
@@ -138,7 +205,7 @@ fn cmd_xy(opts: &ArgMatches) {
 }
 
 pub fn render_xy_chart(
-    source_space_transform: fn((f32, f32, f32)) -> Xyz,
+    source_space_transform: MappingFunc,
     axis_size: u32,
     sample_count: u32,
 ) -> (impl TermImage, f32) {
@@ -154,7 +221,7 @@ pub fn render_xy_chart(
         let red = r as f32 / (samples_per_axis - 1) as f32;
         let green = g as f32 / (samples_per_axis - 1) as f32;
         let blue = b as f32 / (samples_per_axis - 1) as f32;
-        let xyz = source_space_transform((red, green, blue));
+        let xyz = source_space_transform(red, green, blue);
         let (x, y, z) = xyz.into_components();
         let sum = x + y + z;
         let x = x / sum;

@@ -9,7 +9,7 @@ use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::cam_xyz;
+use blitz::camera_specific_junk::dng_cam1_to_xyz;
 use blitz::levels::cam_to_srgb;
 use ndarray::prelude::*;
 use ndarray::Array2;
@@ -119,8 +119,9 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     }
 
     // Compute scaling params
-    let values_curve = make_histogram(img_mdg.iter().copied());
-    let max = values_curve.percentile(99.0).unwrap();
+    //let values_curve = make_histogram(img_mdg.iter().copied());
+    // let max = values_curve.percentile(100.0).unwrap();
+    let max = 1 << 14;
     // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
     // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
     // how they work.
@@ -129,13 +130,11 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     let wb = img.white_bal;
     let scale_factors = make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32]);
 
-    // now rescale such that everything will be between zero and 1
-    //let scale_factors: Vec<f32> = scale_factors.iter().map(|val| val / max as f32).collect();
-
-    let matrix = cam_xyz();
+    let matrix = dng_cam1_to_xyz();
 
     let buf = ImageBuffer::from_fn(img.width as u32, img.height as u32, |x, y| {
         let demo = Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16);
+
         let pixel = Pixel {
             red: clamp(demo.red as f32 / max as f32),
             green: clamp(demo.green as f32 / max as f32),

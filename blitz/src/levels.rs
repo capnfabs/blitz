@@ -28,7 +28,6 @@ pub fn apply_gamma<'a>(grid: impl GridIterator<'a>) {
 
 pub fn cam_to_srgb(matrix: &Matrix3<f32>, px: &Pixel<f32>) -> image::Rgb<u8> {
     let cam = Vector3::new(px.red, px.green, px.blue);
-    let matrix = matrix.normalize();
     let xyz: Vector3<f32> = matrix * cam;
     if let &[x, y, z] = xyz.as_slice() {
         let xyz = palette::Xyz::new(x, y, z);
