@@ -117,10 +117,7 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         print_stats(img_mdg.iter().copied());
     }
 
-    // Compute scaling params
-    //let values_curve = make_histogram(img_mdg.iter().copied());
-    // let max = values_curve.percentile(100.0).unwrap();
-    let max = 1 << 14;
+    let max = (1 << 14) as f32;
 
     // Let's do some WB.
     let wb = img.white_bal;
@@ -134,21 +131,26 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         let demo = Nearest::demosaic(&img_mdg, &mapping, x as u16, y as u16);
 
         let pixel = Pixel {
-            red: clamp(demo.red as f32 / max as f32),
-            green: clamp(demo.green as f32 / max as f32),
-            blue: clamp(demo.blue as f32 / max as f32),
+            red: demo.red as f32 / max,
+            green: demo.green as f32 / max,
+            blue: demo.blue as f32 / max,
         };
         let pixel = Pixel {
             red: pixel.red * scale_factors[0],
             green: pixel.green * scale_factors[1],
             blue: pixel.blue * scale_factors[2],
         };
-        //assert!(pixel.red >= 0.0 && pixel.red <= 1.0);
-        //assert!(pixel.green >= 0.0 && pixel.green <= 1.0);
-        //assert!(pixel.blue >= 0.0 && pixel.blue <= 1.0);
+        // I'm still not sure how you decide upon _when_ to clamp, but
+        // "immediately before a colorspace conversion"
+        // doesn't sound like a terrible place
+
+        let pixel = Pixel {
+            red: clamp(pixel.red),
+            green: clamp(pixel.green),
+            blue: clamp(pixel.blue),
+        };
         // Camera -> XYZ -> sRGB
-        //cam_to_srgb(&matrix, &pixel)
-        pixel.to_rgb()
+        cam_to_srgb(&matrix, &pixel)
     });
 
     println!("Done rendering");
@@ -172,8 +174,7 @@ fn clamp(val: f32) -> f32 {
 // TODO: make some changes such that this works better:
 // - Define a 'VignetteCorrection' to be from center to the edge of the RAW data
 //   so that we can get rid of the hardcoded 3605.
-// TODO: this might be affecting color negatively. I should fix that. Was turning patches orange in
-//   ROFL1807 when they were already oversaturating to magenta.
+// - Important part is that this is _well defined_, not how we choose to represent it.
 fn devignette<'a>(raf: &ParsedRafFile, width: u16, height: u16, img: impl GridIterator<'a>) {
     let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
     let dvg = |x: usize, y: usize, val: u16| {
@@ -191,16 +192,19 @@ fn devignette<'a>(raf: &ParsedRafFile, width: u16, height: u16, img: impl GridIt
     }
 }
 
-/// Returns whitebalance coefficients normalized such that the largest is 1
+/// Returns whitebalance coefficients normalized such that the smallest is 1.
+/// TODO: figure out why this needs to be > 1; it's almost as if we need to do
+///  this in order to make the image clip intentionally, otherwise we get things
+///  that look pink.
 fn make_normalized_wb_coefs(coefs: [f32; 3]) -> [f32; 3] {
     println!("coefs {:?}", coefs);
-    let maxval = coefs
+    let minval = coefs
         .iter()
         .cloned()
         .filter(|v| *v != 0.0)
         .map_into::<NotNan<f32>>()
-        .max()
+        .min()
         .unwrap()
         .into_inner();
-    [coefs[0] / maxval, coefs[1] / maxval, coefs[2] / maxval]
+    [coefs[0] / minval, coefs[1] / minval, coefs[2] / minval]
 }
