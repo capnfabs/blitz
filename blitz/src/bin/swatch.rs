@@ -2,9 +2,7 @@ use crate::SourceSpaces::{CamRgb, DngCamFwd1, DngCamFwd2, RgbLinearMatrix, SrgbP
 use blitz::camera_specific_junk::{
     cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz, xyz_from_rgblin, ColorspaceMatrix,
 };
-use blitz::common::Pixel;
 use blitz::diagnostics::TermImage;
-use blitz::levels::cam_to_srgb;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use image::{DynamicImage, ImageBuffer, Luma};
 use itertools::iproduct;
@@ -18,6 +16,11 @@ fn main() {
         .setting(AppSettings::SubcommandRequired)
         .subcommand(
             SubCommand::with_name("gradients")
+                .arg(
+                    Arg::with_name("Source Space")
+                        .long("source")
+                        .default_value("srgb_palette"),
+                )
                 .arg(
                     Arg::with_name("Size")
                         .short("s")
@@ -51,7 +54,7 @@ fn main() {
                 .arg(
                     Arg::with_name("Source Space")
                         .long("source")
-                        .default_value("camrgb"),
+                        .default_value("srgb_palette"),
                 )
                 .arg(
                     Arg::with_name("Values")
@@ -113,18 +116,18 @@ impl SourceSpaces {
     }
 }
 
-fn make_for_fixed_z(
-    axis_size: u32,
-    matrix: &nalgebra::Matrix3<f32>,
-    path: impl AsRef<Path>,
-    z: u32,
-) {
+fn make_for_fixed_z(axis_size: u32, mapping_func: MappingFunc, path: impl AsRef<Path>, z: u32) {
     let buffer = ImageBuffer::from_fn(axis_size, axis_size, |x, y| {
-        // Camera -> XYZ -> sRGB
-        let red = x as f32 / (axis_size - 1) as f32;
-        let green = y as f32 / (axis_size - 1) as f32;
-        let blue = z as f32 / (axis_size - 1) as f32;
-        cam_to_srgb(&matrix, &Pixel { red, green, blue })
+        // Source Space -> XYZ
+        let r = x as f32 / (axis_size - 1) as f32;
+        let g = y as f32 / (axis_size - 1) as f32;
+        let b = z as f32 / (axis_size - 1) as f32;
+        let xyz = mapping_func(r, g, b);
+        // XYZ -> sRGB
+        let srgb: Srgb = xyz.into();
+        let (r, g, b) = srgb.into_components();
+        let rgb = image::Rgb([(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8]);
+        rgb
     });
 
     buffer.save(path).unwrap();
@@ -133,11 +136,16 @@ fn make_for_fixed_z(
 fn cmd_gradients(opts: &ArgMatches) {
     let output = opts.value_of("Output Directory").unwrap();
     let axis_size = opts.value_of("Size").unwrap().parse().unwrap();
+    let source_space = opts.value_of("Source Space").unwrap();
+    let render_function = SourceSpaces::from_name(source_space)
+        .map(|x| x.mapping_func())
+        .expect("Got invalid source matrix");
+
     create_dir_all(output).unwrap();
     let matrix = cam_xyz();
     for z in 0..axis_size {
         let path = Path::new(output).join(format!("color-{}.png", z));
-        make_for_fixed_z(axis_size, &matrix, &path, z);
+        make_for_fixed_z(axis_size, render_function, &path, z);
     }
 }
 

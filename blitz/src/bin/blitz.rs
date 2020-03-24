@@ -9,7 +9,7 @@ use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::{cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz};
+use blitz::camera_specific_junk::dng_cam1_to_xyz;
 use blitz::levels::cam_to_srgb;
 use ndarray::prelude::*;
 use ndarray::Array2;
@@ -108,6 +108,14 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         img_data,
     )
     .unwrap();
+
+    // Ok, here's the thought process:
+
+    // - A _step_ should take a source image, and an output slice, and be able to populate the output slice from the source.
+    // - Can make a wrapper to convert image + coord -> pixels into image -> output slice for convenience
+    // - Should probably be generic.
+    // - Something to watch out for -- we probably want to make sure that we're not allowing old data through, but we can't really guarantee that if we're trying to minimise allocations.
+    // - Maybe we shouldn't
 
     devignette(raf, img.width, img.height, &mut img_mdg.indexed_iter_mut());
 
