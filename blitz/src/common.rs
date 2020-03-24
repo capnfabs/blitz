@@ -11,6 +11,16 @@ where
     pub blue: U,
 }
 
+impl Pixel<f32> {
+    pub fn to_rgb(&self) -> image::Rgb<u8> {
+        image::Rgb([
+            (self.red * 255.0) as u8,
+            (self.green * 255.0) as u8,
+            (self.blue * 255.0) as u8,
+        ])
+    }
+}
+
 impl Pixel<u16> {
     pub fn to_rgb(&self) -> image::Rgb<u8> {
         image::Rgb([

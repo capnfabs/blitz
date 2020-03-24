@@ -74,15 +74,23 @@ pub fn cam_xyz() -> ColorspaceMatrix {
 // From tag C715 (ForwardMatrix2) in DSCF6233.dng
 // Note that this is XYZ D50 and normally we use D65, not sure if it matters.
 pub fn dng_cam2_to_xyz() -> ColorspaceMatrix {
-    Matrix3::new(
-        0.3909, 0.4132, 0.1602, 0.1935, 0.7584, 0.0481, 0.0909, 0.0015, 0.7326,
-    )
+    #[rustfmt::skip]
+    let mat = Matrix3::new(
+        0.3909, 0.4132, 0.1602, 
+        0.1935, 0.7584, 0.0481, 
+        0.0909, 0.0015, 0.7326,
+    );
+    mat
 }
 
 // From tag C714 (ForwardMatrix1) in DSCF6233.dng
 // Note that this is XYZ D50 and normally we use D65, not sure if it matters.
 pub fn dng_cam1_to_xyz() -> ColorspaceMatrix {
-    Matrix3::new(
-        0.4481, 0.4033, 0.1129, 0.2183, 0.7469, 0.0349, 0.1230, 0.0016, 0.7004,
-    )
+    #[rustfmt::skip]
+    let mat = Matrix3::new(
+        0.4481, 0.4033, 0.1129, 
+        0.2183, 0.7469, 0.0349, 
+        0.1230, 0.0016, 0.7004,
+    );
+    mat
 }

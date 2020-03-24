@@ -59,8 +59,9 @@ where
         let x = x as usize;
         let y = y as usize;
         let pixel = (x, y);
-        // TODO: don't hardcode this
-        if x >= 6047 || y >= 4037 || x == 0 || y == 0 {
+        // TODO: maybe inline this.
+        let (width, height) = img_grid.size();
+        if x >= width - 1 || y >= height - 1 || x == 0 || y == 0 {
             return BLACK.clone();
         }
         let offsets = find_offsets(mapping, pixel);

@@ -9,7 +9,7 @@ use itertools::Itertools;
 use libraw::griditer::GridIterator;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::dng_cam1_to_xyz;
+use blitz::camera_specific_junk::{cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz};
 use blitz::levels::cam_to_srgb;
 use ndarray::prelude::*;
 use ndarray::Array2;
@@ -112,7 +112,6 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     devignette(raf, img.width, img.height, &mut img_mdg.indexed_iter_mut());
 
     levels::black_sub(img_mdg.indexed_iter_mut(), &img.black_levels);
-    //levels::apply_gamma(img_mdg.indexed_iter_mut());
 
     if output_stats {
         print_stats(img_mdg.iter().copied());
@@ -122,12 +121,11 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     //let values_curve = make_histogram(img_mdg.iter().copied());
     // let max = values_curve.percentile(100.0).unwrap();
     let max = 1 << 14;
-    // This is int scaling, so it'll be pretty crude (e.g. Green will only scale 4x, not 4.5x)
-    // Camera scaling factors are 773, 302, 412. They are theoretically white balance but I don't know
-    // how they work.
 
     // Let's do some WB.
     let wb = img.white_bal;
+    // I think the problem here is an interaction between WB scaling and the
+    // matrix?
     let scale_factors = make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32]);
 
     let matrix = dng_cam1_to_xyz();
@@ -145,11 +143,12 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
             green: pixel.green * scale_factors[1],
             blue: pixel.blue * scale_factors[2],
         };
-        assert!(pixel.red >= 0.0 && pixel.red <= 1.0);
-        assert!(pixel.green >= 0.0 && pixel.green <= 1.0);
-        assert!(pixel.blue >= 0.0 && pixel.blue <= 1.0);
+        //assert!(pixel.red >= 0.0 && pixel.red <= 1.0);
+        //assert!(pixel.green >= 0.0 && pixel.green <= 1.0);
+        //assert!(pixel.blue >= 0.0 && pixel.blue <= 1.0);
         // Camera -> XYZ -> sRGB
-        cam_to_srgb(&matrix, &pixel)
+        //cam_to_srgb(&matrix, &pixel)
+        pixel.to_rgb()
     });
 
     println!("Done rendering");
@@ -173,6 +172,8 @@ fn clamp(val: f32) -> f32 {
 // TODO: make some changes such that this works better:
 // - Define a 'VignetteCorrection' to be from center to the edge of the RAW data
 //   so that we can get rid of the hardcoded 3605.
+// TODO: this might be affecting color negatively. I should fix that. Was turning patches orange in
+//   ROFL1807 when they were already oversaturating to magenta.
 fn devignette<'a>(raf: &ParsedRafFile, width: u16, height: u16, img: impl GridIterator<'a>) {
     let devignette = vignette_correction::from_fuji_tags(raf.vignette_attenuation());
     let dvg = |x: usize, y: usize, val: u16| {
@@ -201,6 +202,5 @@ fn make_normalized_wb_coefs(coefs: [f32; 3]) -> [f32; 3] {
         .max()
         .unwrap()
         .into_inner();
-    println!("coefs max {:?}", maxval);
     [coefs[0] / maxval, coefs[1] / maxval, coefs[2] / maxval]
 }
