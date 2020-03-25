@@ -60,9 +60,8 @@ pub fn render_histogram(h: &histo::Histo, height: usize, width: usize) -> impl T
     use svg::Document;
     let mut data = Data::new().move_to((0, height));
     let mut x_pos = 0;
-    let view = h.view_clipped(width);
-    let max_bucket = view.iter().map(|bucket| bucket.count).max().unwrap();
-    for bucket in view.iter() {
+    let max_bucket = h.iter().map(|bucket| bucket.count).max().unwrap();
+    for bucket in h.iter() {
         let bucket_height = height * bucket.count / max_bucket;
         data = data.line_to((x_pos, bucket_height));
         x_pos += 1;

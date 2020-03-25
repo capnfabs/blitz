@@ -3,7 +3,6 @@ use blitz::demosaic::{Demosaic, Nearest};
 use blitz::diagnostics::TermImage;
 use blitz::{diagnostics, histo, pathutils, vignette_correction};
 use clap::{App, Arg, ArgMatches};
-use histogram::Histogram;
 use image::{ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
@@ -25,6 +24,7 @@ fn main() {
     let matches = App::new("Blitz")
         .arg(Arg::with_name("render").short("r").long("render"))
         .arg(Arg::with_name("open").long("open"))
+        .arg(Arg::with_name("stats").long("stats"))
         .arg(Arg::with_name("INPUT").required(true).index(1))
         .get_matches();
 
@@ -71,27 +71,10 @@ fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     }
 }
 
-fn make_histogram<T, U>(iter: T) -> Histogram
-where
-    T: std::iter::Iterator<Item = U>,
-    U: Into<u64>,
-{
-    let mut h = histogram::Histogram::new();
-    for v in iter {
-        h.increment(v.into()).unwrap();
-    }
-    h
-}
-
-fn print_stats(img: &ArrayView2<u16>) {
-    println!("Percentile chart!");
-    // Percentile chart
-    let values_curve = make_histogram(img.iter().copied());
-    diagnostics::render_tone_curve(&values_curve, 600, 400).display();
-
-    println!();
+fn print_stats(img: &ArrayView2<f32>) {
     println!("Histogram!");
-    let h = histo::Histo::from_iter(img.iter().copied());
+    let histo_width = 1000;
+    let h = histo::Histo::from_iter(img.iter().map(|&x| x.powf(1.0 / 2.2)), histo_width);
     diagnostics::render_histogram(&h, 600, 1000).display();
     println!();
 }
@@ -137,10 +120,9 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         val
     });
 
-    /*
     if output_stats {
-        print_stats(&img_mdg.view());
-    }*/
+        print_stats(&img.view());
+    }
 
     let img = par_index_map_raiso(&img.view(), |x, y, data: &ArrayView2<_>| {
         let val = Nearest::demosaic(data, &mapping, x, y);

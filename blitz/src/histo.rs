@@ -2,63 +2,66 @@ use std::iter::Enumerate;
 
 pub struct Histo {
     data: Vec<usize>,
-    found_min: u16,
-    found_max: u16,
+    found_min: f32,
+    found_max: f32,
     total: usize,
 }
 
 impl Histo {
     pub fn new() -> Self {
-        let data = vec![0usize; std::u16::MAX as usize + 1];
+        // Default to 65k
+        Self::with_buckets(1 << 16)
+    }
+
+    pub fn with_buckets(num_buckets: usize) -> Self {
+        let data = vec![0usize; num_buckets];
         Histo {
             data,
-            found_min: std::u16::MAX,
-            found_max: 0,
+            found_min: std::f32::MIN,
+            found_max: std::f32::MAX,
             total: 0,
         }
     }
 
-    pub fn from_iter(iter: impl Iterator<Item = u16>) -> Self {
-        let mut h = Self::new();
+    pub fn from_iter(iter: impl Iterator<Item = f32>, num_buckets: usize) -> Self {
+        let mut h = Self::with_buckets(num_buckets);
         for v in iter {
             h.add(v);
         }
         h
     }
 
-    pub fn add(&mut self, item: u16) {
+    pub fn add(&mut self, item: f32) {
         if item > self.found_max {
             self.found_max = item;
         }
         if item < self.found_min {
             self.found_min = item;
         }
-        self.data[item as usize] += 1;
+        let mut index = (item * (self.data.len() - 1) as f32) as usize;
+        if index >= self.data.len() {
+            index = self.data.len() - 1;
+        }
+        self.data[index] += 1;
         self.total += 1;
     }
 
-    pub fn view_clipped(&self, buckets: usize) -> HistoView {
-        let range = (self.found_max - self.found_min) as usize;
-        // round up to ensure the entire range is included.
-        let bucket_width = (range + buckets - 1) / buckets;
-        let data = self.data[self.found_min as usize..]
-            .chunks(bucket_width)
-            .map(|chunk| chunk.iter().sum())
-            .collect();
-        HistoView {
-            data,
+    pub fn iter(&self) -> ViewIter {
+        let bucket_width = 1.0 / (self.data.len() + 1) as f32;
+        ViewIter {
+            iter: self.data.iter().enumerate(),
             min: self.found_min,
             max: self.found_max,
-            bucket_width: bucket_width as u16,
+            bucket_width,
         }
     }
 }
 
 pub struct HistoView {
     data: Vec<usize>,
-    min: u16,
-    max: u16,
-    bucket_width: u16,
+    min: f32,
+    max: f32,
+    bucket_width: f32,
 }
 
 impl HistoView {
@@ -74,14 +77,14 @@ impl HistoView {
 
 pub struct ViewIter<'a> {
     iter: Enumerate<core::slice::Iter<'a, usize>>,
-    min: u16,
-    max: u16,
-    bucket_width: u16,
+    min: f32,
+    max: f32,
+    bucket_width: f32,
 }
 
 pub struct Bucket {
-    pub min: u16,
-    pub max: u16,
+    pub min: f32,
+    pub max: f32,
     pub count: usize,
 }
 
@@ -90,9 +93,9 @@ impl<'a> Iterator for ViewIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|(idx, count)| Bucket {
-            min: self.min + self.bucket_width * idx as u16,
-            // There are combinations of values for which this will die.
-            max: self.max + self.bucket_width * (idx + 1) as u16,
+            min: self.min + self.bucket_width * idx as f32,
+            // f32here are combinations of values for which this will die.
+            max: self.max + self.bucket_width * (idx + 1) as f32,
             count: *count,
         })
     }
