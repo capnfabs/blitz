@@ -217,32 +217,81 @@ pub struct ParsedRafFile<'a> {
     tiffish: TiffishData,
 }
 
-impl<'a> ParsedRafFile<'a> {
-    pub fn render_info(&self) -> RenderInfo {
-        // Oh boy
-        let mut xtrans: Vec<Color> = self
-            .metadata
+fn extract_xtrans_mapping(metadata: &ImgMeta) -> Vec<Color> {
+    // Oh boy
+    let mut xtrans: Vec<Color> = metadata
+        .iter()
+        .filter_map(|it| match it {
+            XTransMapping(val) => Some(*val),
+            _ => None,
+        })
+        .exactly_one()
+        .unwrap()
+        .iter()
+        .map(|num| Color::from(*num as i8).unwrap())
+        .collect();
+    // This is _backwards_ in the file.
+    xtrans.reverse();
+    xtrans
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct CropRect {
+    pub left: usize,
+    pub right: usize,
+    pub top: usize,
+    pub bottom: usize,
+}
+
+impl CropRect {
+    fn new(metadata: &ImgMeta) -> Self {
+        let (top, left) = metadata
             .iter()
             .filter_map(|it| match it {
-                XTransMapping(val) => Some(*val),
+                &Tag::CropTopLeft(top, left) => Some((top, left)),
                 _ => None,
             })
             .exactly_one()
-            .unwrap()
+            .unwrap();
+        let (width, height) = metadata
             .iter()
-            .map(|num| Color::from(*num as i8).unwrap())
-            .collect();
-        // This is _backwards_ in the file.
-        xtrans.reverse();
+            .filter_map(|it| match it {
+                &Tag::HeightWidthCrop(height, width) => Some((width, height)),
+                _ => None,
+            })
+            .exactly_one()
+            .unwrap();
+        let left = left as usize;
+        let top = top as usize;
+        let right = left + width as usize;
+        let bottom = top + height as usize;
+        CropRect {
+            left,
+            right,
+            top,
+            bottom,
+        }
+    }
+    pub fn size(&self) -> (usize, usize) {
+        (self.right - self.left, self.bottom - self.top)
+    }
+}
+
+impl<'a> ParsedRafFile<'a> {
+    pub fn render_info(&self) -> RenderInfo {
+        let xtrans_mapping = extract_xtrans_mapping(&self.metadata);
         let black_levels =
             Array2::from_shape_vec((6, 6).set_f(true), self.tiffish.black_levels.clone()).unwrap();
+        let crop_rect = CropRect::new(&self.metadata);
+
         RenderInfo {
             width: self.tiffish.width,
             height: self.tiffish.height,
             bit_depth: self.tiffish.bit_depth,
             black_levels,
             white_bal: self.tiffish.white_bal.clone(),
-            xtrans_mapping: xtrans,
+            xtrans_mapping,
+            crop_rect,
             raw_data: &self.tiffish.raw_data,
         }
     }
@@ -270,6 +319,7 @@ pub struct RenderInfo<'a> {
     pub black_levels: BlackPattern,
     pub white_bal: WhiteBalCoefficients,
     pub xtrans_mapping: Vec<Color>,
+    pub crop_rect: CropRect,
     pub raw_data: &'a Vec<u16>,
 }
 

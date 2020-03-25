@@ -81,25 +81,25 @@ fn print_stats(img: &ArrayView2<f32>) {
 
 fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     let raf = img;
-    let img = &img.render_info();
+    let ri = &img.render_info();
 
-    let mapping = Array2::from_shape_vec((6, 6).set_f(true), img.xtrans_mapping.clone()).unwrap();
+    let mapping = Array2::from_shape_vec((6, 6).set_f(true), ri.xtrans_mapping.clone()).unwrap();
 
     let src = ArrayView2::from_shape(
-        (img.width as usize, img.height as usize).set_f(true),
-        img.raw_data,
+        (ri.width as usize, ri.height as usize).set_f(true),
+        ri.raw_data,
     )
     .unwrap();
 
     // Some setup
     let max = (1 << 14) as f32;
-    let wb = img.white_bal;
+    let wb = ri.white_bal;
     let scale_factors = make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32]);
     let matrix = dng_cam1_to_xyz();
 
     // Define steps
     let devignette = make_devignetter(raf);
-    let black_sub = make_black_sub_task(img.black_levels.clone());
+    let black_sub = make_black_sub_task(ri.black_levels.clone());
     let convert_to_float = |_: usize, _: usize, val: u16| val as f32 / max;
     let apply_wb = move |pixel: &Pixel<f32>| Pixel {
         red: pixel.red * scale_factors[0],
@@ -113,6 +113,8 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     };
     let convert_to_srgb = |pixel: &Pixel<_>| cam_to_srgb(&matrix, pixel);
 
+    // Run steps
+    // This is the "operating on single values" phase.
     let img = par_index_map_siso(&src, |x, y, val| {
         let val = devignette(x, y, val);
         let val = black_sub(x, y, val);
@@ -124,6 +126,7 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         print_stats(&img.view());
     }
 
+    // This is "demosaic" and then "operate on single values again".
     let img = par_index_map_raiso(&img.view(), |x, y, data: &ArrayView2<_>| {
         let val = Nearest::demosaic(data, &mapping, x, y);
         let val = apply_wb(&val);
@@ -132,9 +135,13 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
         val
     });
 
-    let (width, height) = img.dim();
-    let buf = ImageBuffer::from_fn(width as u32, height as u32, |x, y| {
-        img[(x as usize, y as usize)]
+    // Last step: crop and convert.
+    let (output_width, output_height) = ri.crop_rect.size();
+    let buf = ImageBuffer::from_fn(output_width as u32, output_height as u32, |x, y| {
+        img[(
+            ri.crop_rect.left + x as usize,
+            ri.crop_rect.top + y as usize,
+        )]
     });
 
     println!("Done rendering");
