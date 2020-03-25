@@ -96,6 +96,7 @@ impl SourceSpaces {
         }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             SrgbPalette => "srgb_palette",

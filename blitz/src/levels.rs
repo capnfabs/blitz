@@ -1,15 +1,24 @@
 use crate::common::Pixel;
+use crate::tasks::SingleInputSingleOutput;
 use itertools::Itertools;
 use libraw::griditer::{BlackPattern, GridIterator, IndexWrapped2};
 use nalgebra::{Matrix3, Vector3};
+use ndarray::ArrayViewMut2;
 use palette::chromatic_adaptation::AdaptInto;
 use palette::white_point::{D50, D65};
 use palette::{Srgb, Xyz};
 
-pub fn black_sub<'a>(grid: impl GridIterator<'a>, black_pattern: &BlackPattern) {
-    for (pos, x) in grid {
+pub fn black_sub(black_pattern: &BlackPattern, grid: &mut ArrayViewMut2<u16>) {
+    for (pos, x) in grid.indexed_iter_mut() {
         let &black = black_pattern.index_wrapped(pos.0, pos.1);
         *x = x.saturating_sub(black);
+    }
+}
+
+pub fn make_black_sub_task(black_pattern: BlackPattern) -> impl SingleInputSingleOutput<u16> {
+    move |x, y, val: u16| {
+        let &black = black_pattern.index_wrapped(x, y);
+        val.saturating_sub(black)
     }
 }
 
