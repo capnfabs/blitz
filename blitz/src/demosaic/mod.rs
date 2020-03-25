@@ -1,7 +1,8 @@
 use crate::common::Pixel;
-use libraw::griditer::{FilterMap, GridRandomAccess, IndexWrapped2};
+use libraw::griditer::{FilterMap, IndexWrapped2};
 use libraw::Color;
-use num::Unsigned;
+use ndarray::ArrayView2;
+use num_traits::Num;
 use std::marker::PhantomData;
 
 type Offset = (i32, i32);
@@ -10,8 +11,8 @@ const CHECK_ORDER: [Offset; 5] = [(0, 0), (0, 1), (1, 0), (-1, 0), (0, -1)];
 
 type Position = (usize, usize);
 
-pub trait Demosaic<T: Copy + Unsigned, Container: GridRandomAccess> {
-    fn demosaic(img_grid: &Container, mapping: &FilterMap, x: u16, y: u16) -> Pixel<T>;
+pub trait Demosaic<T: Copy + Num> {
+    fn demosaic(img_grid: &ArrayView2<T>, mapping: &FilterMap, x: usize, y: usize) -> Pixel<T>;
 }
 
 fn offset_for_color(mapping: &FilterMap, color: Color, pos: Position) -> Position {
@@ -45,24 +46,21 @@ pub struct Nearest(PhantomData<u16>);
 #[allow(dead_code)]
 pub struct Passthru(PhantomData<u16>);
 
-static BLACK: Pixel<u16> = Pixel {
-    red: 0,
-    green: 0,
-    blue: 0,
-};
+fn black<T: Copy + Num>() -> Pixel<T> {
+    Pixel {
+        red: T::zero(),
+        green: T::zero(),
+        blue: T::zero(),
+    }
+}
 
-impl<Container> Demosaic<u16, Container> for Nearest
-where
-    Container: GridRandomAccess,
-{
-    fn demosaic(img_grid: &Container, mapping: &FilterMap, x: u16, y: u16) -> Pixel<u16> {
-        let x = x as usize;
-        let y = y as usize;
+impl<T: Copy + Num> Demosaic<T> for Nearest {
+    fn demosaic(img_grid: &ArrayView2<T>, mapping: &FilterMap, x: usize, y: usize) -> Pixel<T> {
         let pixel = (x, y);
         // TODO: maybe inline this.
-        let (width, height) = img_grid.size();
+        let (width, height) = img_grid.dim();
         if x >= width - 1 || y >= height - 1 || x == 0 || y == 0 {
-            return BLACK.clone();
+            return black();
         }
         let offsets = find_offsets(mapping, pixel);
         Pixel {
@@ -73,28 +71,25 @@ where
     }
 }
 
-impl<Container> Demosaic<u16, Container> for Passthru
-where
-    Container: GridRandomAccess,
-{
-    fn demosaic(img_grid: &Container, mapping: &FilterMap, x: u16, y: u16) -> Pixel<u16> {
-        let v = img_grid[(x as usize, y as usize)];
+impl<T: Copy + Num> Demosaic<T> for Passthru {
+    fn demosaic(img_grid: &ArrayView2<T>, mapping: &FilterMap, x: usize, y: usize) -> Pixel<T> {
+        let v = img_grid[(x, y)];
         let color = mapping.index_wrapped(x as usize, y as usize);
         match color {
             Color::Red => Pixel {
                 red: v,
-                blue: 0,
-                green: 0,
+                blue: T::zero(),
+                green: T::zero(),
             },
             Color::Green => Pixel {
-                red: 0,
-                blue: 0,
+                red: T::zero(),
+                blue: T::zero(),
                 green: v,
             },
             Color::Blue => Pixel {
-                red: 0,
+                red: T::zero(),
                 blue: v,
-                green: 0,
+                green: T::zero(),
             },
         }
     }

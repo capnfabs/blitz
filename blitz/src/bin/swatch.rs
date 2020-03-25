@@ -96,6 +96,7 @@ impl SourceSpaces {
         }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             SrgbPalette => "srgb_palette",
@@ -142,7 +143,6 @@ fn cmd_gradients(opts: &ArgMatches) {
         .expect("Got invalid source matrix");
 
     create_dir_all(output).unwrap();
-    let matrix = cam_xyz();
     for z in 0..axis_size {
         let path = Path::new(output).join(format!("color-{}.png", z));
         make_for_fixed_z(axis_size, render_function, &path, z);

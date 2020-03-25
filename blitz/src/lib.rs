@@ -5,4 +5,5 @@ pub mod diagnostics;
 pub mod histo;
 pub mod levels;
 pub mod pathutils;
+pub mod tasks;
 pub mod vignette_correction;
