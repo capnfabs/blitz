@@ -7,7 +7,7 @@ use image::{imageops, DynamicImage, ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::dng_cam1_to_xyz;
+use blitz::camera_specific_junk::{dng_cam1_to_xyz, dng_cam2_to_xyz};
 use blitz::levels::{cam_to_srgb, make_black_sub_task};
 use blitz::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
 use image::imageops::FilterType::Lanczos3;
@@ -16,14 +16,12 @@ use ndarray::Array2;
 use ordered_float::NotNan;
 
 struct Flags {
-    render: bool,
     open: bool,
     stats: bool,
 }
 
 fn main() {
     let matches = App::new("Blitz")
-        .arg(Arg::with_name("render").short("r").long("render"))
         .arg(Arg::with_name("open").long("open"))
         .arg(Arg::with_name("stats").long("stats"))
         .arg(Arg::with_name("INPUT").required(true).index(1))
@@ -36,28 +34,21 @@ fn main() {
 }
 
 fn make_flags(matches: &ArgMatches) -> Flags {
-    let render = matches.occurrences_of("render") == 1;
     let open = matches.occurrences_of("open") == 1;
     let stats = matches.occurrences_of("stats") == 1;
-    Flags {
-        render,
-        open,
-        stats,
-    }
+    Flags { open, stats }
 }
 
 fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     println!("Loading RAW data: native");
     let file = RafFile::open(img_file).unwrap();
-    println!("Opened file: {:?}", file);
+    println!(
+        "Opened file: {}",
+        file.path().file_name().and_then(|x| x.to_str()).unwrap()
+    );
     println!("Parsing...");
     let details = file.parse_raw().unwrap();
-
     println!("Parsed.");
-
-    if !flags.render {
-        return;
-    }
 
     let raw_preview_filename = pathutils::get_output_path("native");
     let rendered = render_raw(&details, flags.stats);
@@ -74,6 +65,7 @@ fn load_and_maybe_render(img_file: &str, flags: &Flags) {
         let img = imageops::resize(&rendered, 563, 375, Lanczos3);
         println!("Displaying...");
         DynamicImage::ImageRgb8(img).display();
+        println!("Saved to {}", raw_preview_filename.to_str().unwrap());
     }
 }
 
@@ -101,7 +93,7 @@ fn render_raw(img: &ParsedRafFile, output_stats: bool) -> image::RgbImage {
     let max = (1 << 14) as f32;
     let wb = ri.white_bal;
     let scale_factors = make_normalized_wb_coefs([wb.red as f32, wb.green as f32, wb.blue as f32]);
-    let matrix = dng_cam1_to_xyz();
+    let matrix = dng_cam2_to_xyz();
 
     // Define steps
     let devignette = make_devignetter(raf);

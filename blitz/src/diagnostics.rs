@@ -18,6 +18,8 @@ pub trait TermImage {
 
 impl TermImage for DynamicImage {
     fn draw_to<W: std::io::Write>(&self, writer: &mut W) {
+        // TODO: make it possible to choose the format maybe? Or provide a hint
+        //  "lossy" and "lossless"
         self.write_to(writer, ImageOutputFormat::Png).unwrap();
     }
 }

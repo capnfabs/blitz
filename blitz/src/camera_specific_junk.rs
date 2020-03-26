@@ -73,6 +73,7 @@ pub fn cam_xyz() -> ColorspaceMatrix {
 
 // From tag C715 (ForwardMatrix2) in DSCF6233.dng
 // Note that this is XYZ D50 and normally we use D65, not sure if it matters.
+// This is calibration illuminant 21 (D65 == roughly 6504K)
 pub fn dng_cam2_to_xyz() -> ColorspaceMatrix {
     #[rustfmt::skip]
     let mat = Matrix3::new(
@@ -85,6 +86,7 @@ pub fn dng_cam2_to_xyz() -> ColorspaceMatrix {
 
 // From tag C714 (ForwardMatrix1) in DSCF6233.dng
 // Note that this is XYZ D50 and normally we use D65, not sure if it matters.
+// This is calibration illuminant 17 (Standard Light A), approx 2856K
 pub fn dng_cam1_to_xyz() -> ColorspaceMatrix {
     #[rustfmt::skip]
     let mat = Matrix3::new(

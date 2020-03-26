@@ -16,7 +16,7 @@ use nom::sequence::tuple;
 use nom::IResult;
 use std::fmt::Debug;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 type I<'a> = &'a [u8];
 
@@ -455,14 +455,20 @@ fn parse_all(input: I) -> IResult<I, ParsedRafFile> {
 #[derive(Debug)]
 pub struct RafFile {
     file: File,
+    path: PathBuf,
     mmap: Mmap,
 }
 
 impl RafFile {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<RafFile, RafError> {
-        let file = File::open(path)?;
+        let file = File::open(&path)?;
         let mmap = unsafe { Mmap::map(&file) }?;
-        Ok(RafFile { file, mmap })
+        let path = PathBuf::from(path.as_ref());
+        Ok(RafFile { file, path, mmap })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     pub fn parse_meta(&self) -> Result<ImgMeta, RafError> {
