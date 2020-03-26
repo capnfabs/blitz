@@ -3,13 +3,14 @@ use blitz::demosaic::{Demosaic, Nearest};
 use blitz::diagnostics::TermImage;
 use blitz::{diagnostics, histo, pathutils, vignette_correction};
 use clap::{App, Arg, ArgMatches};
-use image::{ImageBuffer, ImageFormat};
+use image::{imageops, DynamicImage, ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
 use blitz::camera_specific_junk::dng_cam1_to_xyz;
 use blitz::levels::{cam_to_srgb, make_black_sub_task};
 use blitz::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
+use image::imageops::FilterType::Lanczos3;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
@@ -68,6 +69,11 @@ fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     println!("Done saving");
     if flags.open {
         pathutils::open_preview(&raw_preview_filename);
+    } else {
+        println!("Resizing...");
+        let img = imageops::resize(&rendered, 563, 375, Lanczos3);
+        println!("Displaying...");
+        DynamicImage::ImageRgb8(img).display();
     }
 }
 
