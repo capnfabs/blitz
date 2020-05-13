@@ -2,7 +2,7 @@ use crate::SourceSpaces::{CamRgb, DngCamFwd1, DngCamFwd2, RgbLinearMatrix, SrgbP
 use blitz::camera_specific_junk::{
     cam_xyz, dng_cam1_to_xyz, dng_cam2_to_xyz, xyz_from_rgblin, ColorspaceMatrix,
 };
-use blitz::diagnostics::TermImage;
+use blitzbin::diagnostics::TermImage;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use image::{DynamicImage, ImageBuffer, Luma};
 use itertools::iproduct;

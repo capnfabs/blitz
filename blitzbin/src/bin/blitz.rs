@@ -1,7 +1,6 @@
 use blitz::common::Pixel;
 use blitz::demosaic::{Demosaic, Nearest};
-use blitz::diagnostics::TermImage;
-use blitz::{diagnostics, histo, pathutils, vignette_correction};
+use blitz::vignette_correction;
 use clap::{App, Arg, ArgMatches};
 use image::{imageops, DynamicImage, ImageBuffer, ImageFormat};
 use itertools::Itertools;
@@ -10,6 +9,8 @@ extern crate nalgebra as na;
 use blitz::camera_specific_junk::{dng_cam1_to_xyz, dng_cam2_to_xyz};
 use blitz::levels::{cam_to_srgb, make_black_sub_task};
 use blitz::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
+use blitzbin::diagnostics::TermImage;
+use blitzbin::{diagnostics, histo, pathutils};
 use image::imageops::FilterType::Lanczos3;
 use ndarray::prelude::*;
 use ndarray::Array2;

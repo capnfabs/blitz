@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use directories::UserDirs;
-use git2::Repository;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,27 +7,8 @@ pub fn get_output_path(label: &str) -> PathBuf {
     let ud = UserDirs::new().unwrap();
     let download_dir = ud.download_dir().unwrap();
     let utc: DateTime<Utc> = Utc::now();
-    let filename = format!(
-        "render-{0}-rev{1}-{2}.tiff",
-        utc.format("%F-%H%M%S"),
-        &git_sha_descriptor()[..7],
-        label,
-    );
+    let filename = format!("render-{0}-rev{1}.tiff", utc.format("%F-%H%M%S"), label,);
     download_dir.join(filename)
-}
-
-fn git_sha_descriptor() -> String {
-    let exepath = std::env::current_exe().unwrap();
-    let repo = match Repository::discover(exepath.parent().unwrap()) {
-        Ok(repo) => repo,
-        Err(e) => panic!("failed to open: {}", e),
-    };
-    let head = match repo.head() {
-        Ok(val) => val,
-        Err(e) => panic!(e),
-    };
-    let commit = head.peel_to_commit().unwrap();
-    commit.id().to_string()
 }
 
 pub fn open_preview(filename: impl AsRef<Path>) {
