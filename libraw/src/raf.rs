@@ -427,6 +427,11 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
     ))
 }
 
+fn parse_preview(input: I) -> IResult<I, &[u8]> {
+    let (i, (header, offsets)) = tuple((header, offset_sizes))(input)?;
+    Ok((i, offsets.jpeg.apply(input)))
+}
+
 fn parse_only_metadata(input: I) -> IResult<I, ImgMeta> {
     let (_, (_, offsets)) = tuple((header, offset_sizes))(input)?;
     let metadata = offsets.metadata.apply(input);
@@ -477,6 +482,12 @@ impl RafFile {
             Ok((_, parsed)) => Ok(parsed),
             Err(_) => Err(RafError::Unknown),
         }
+    }
+
+    pub fn parse_preview(&self) -> Result<&[u8], RafError> {
+        parse_preview(&self.mmap)
+            .map(|(_, jpg)| jpg)
+            .map_err(|_| RafError::Unknown)
     }
 
     pub fn parse_raw(&self) -> Result<ParsedRafFile, RafError> {

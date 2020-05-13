@@ -1,6 +1,11 @@
 ## Setup
 
-...
+
+Copy the dylib to the GUI app:
+
+```
+cargo build && cp target/debug/libblitzexport.dylib blitz_gui/build/macos/Build/Products/Debug/blitz_gui.app/Contents/Frameworks
+```
 
 ## Profiling
 

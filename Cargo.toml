@@ -2,6 +2,7 @@
 
 members = [
     "blitz",
+    "blitzexport",
     "libraw",
 ]
 
