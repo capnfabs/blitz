@@ -2,11 +2,6 @@ use libc::c_char;
 use libraw::raf::RafFile;
 use std::ffi::CStr;
 
-#[no_mangle]
-pub extern "C" fn addition(a: u32, b: u32) -> u32 {
-    a + b
-}
-
 pub struct RawRenderer {
     file: RafFile,
 }
@@ -45,7 +40,7 @@ pub struct Buffer {
 }
 
 #[no_mangle]
-pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> *mut Buffer {
+pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -54,15 +49,11 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> *mut Buffer
     let mut buf = content.into_boxed_slice();
     let data = buf.as_mut_ptr();
     let len = buf.len();
-    Box::into_raw(Box::new(Buffer { data, len }))
+    Buffer { data, len }
 }
 
 #[no_mangle]
-pub extern "C" fn free_buffer(ptr: *mut Buffer) {
-    if ptr.is_null() {
-        return;
-    }
-    let buf = unsafe { Box::from_raw(ptr) };
+pub extern "C" fn free_buffer(buf: Buffer) {
     let s = unsafe { std::slice::from_raw_parts_mut(buf.data, buf.len) };
     let s = s.as_mut_ptr();
     unsafe {

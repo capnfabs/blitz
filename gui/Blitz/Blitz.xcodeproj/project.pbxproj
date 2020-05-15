@@ -1,0 +1,634 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1F4C52B4246EDB9B0085A2D0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52B3246EDB9B0085A2D0 /* AppDelegate.swift */; };
+		1F4C52B6246EDB9B0085A2D0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52B5246EDB9B0085A2D0 /* ContentView.swift */; };
+		1F4C52B8246EDB9C0085A2D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C52B7246EDB9C0085A2D0 /* Assets.xcassets */; };
+		1F4C52BB246EDB9C0085A2D0 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C52BA246EDB9C0085A2D0 /* Preview Assets.xcassets */; };
+		1F4C52BE246EDB9C0085A2D0 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C52BC246EDB9C0085A2D0 /* Main.storyboard */; };
+		1F4C52CA246EDB9D0085A2D0 /* BlitzTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52C9246EDB9D0085A2D0 /* BlitzTests.swift */; };
+		1F4C52D5246EDB9D0085A2D0 /* BlitzUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */; };
+		1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */; };
+		1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */; };
+		1F4C52EB246EEAEB0085A2D0 /* libblitzexport.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1F4C52C6246EDB9D0085A2D0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F4C52A8246EDB9B0085A2D0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1F4C52AF246EDB9B0085A2D0;
+			remoteInfo = Blitz;
+		};
+		1F4C52D1246EDB9D0085A2D0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F4C52A8246EDB9B0085A2D0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1F4C52AF246EDB9B0085A2D0;
+			remoteInfo = Blitz;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1F4C52B0246EDB9B0085A2D0 /* Blitz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Blitz.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1F4C52B3246EDB9B0085A2D0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1F4C52B5246EDB9B0085A2D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1F4C52B7246EDB9C0085A2D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1F4C52BA246EDB9C0085A2D0 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		1F4C52BD246EDB9C0085A2D0 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		1F4C52BF246EDB9C0085A2D0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1F4C52C0246EDB9C0085A2D0 /* Blitz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Blitz.entitlements; sourceTree = "<group>"; };
+		1F4C52C5246EDB9C0085A2D0 /* BlitzTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BlitzTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1F4C52C9246EDB9D0085A2D0 /* BlitzTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlitzTests.swift; sourceTree = "<group>"; };
+		1F4C52CB246EDB9D0085A2D0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1F4C52D0246EDB9D0085A2D0 /* BlitzUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BlitzUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlitzUITests.swift; sourceTree = "<group>"; };
+		1F4C52D6246EDB9D0085A2D0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1F4C52E2246EDBF30085A2D0 /* Blitz-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Blitz-Bridging-Header.h"; sourceTree = "<group>"; };
+		1F4C52E3246EDBF30085A2D0 /* blitz_bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = blitz_bindings.h; sourceTree = "<group>"; };
+		1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = blitz_bindings.c; sourceTree = "<group>"; };
+		1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RendererWrapper.swift; path = Models/RendererWrapper.swift; sourceTree = "<group>"; };
+		1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libblitzexport.a; path = ../../target/debug/libblitzexport.a; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1F4C52AD246EDB9B0085A2D0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F4C52EB246EEAEB0085A2D0 /* libblitzexport.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52C2246EDB9C0085A2D0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52CD246EDB9D0085A2D0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1F4C52A7246EDB9B0085A2D0 = {
+			isa = PBXGroup;
+			children = (
+				1F4C52B2246EDB9B0085A2D0 /* Blitz */,
+				1F4C52C8246EDB9D0085A2D0 /* BlitzTests */,
+				1F4C52D3246EDB9D0085A2D0 /* BlitzUITests */,
+				1F4C52B1246EDB9B0085A2D0 /* Products */,
+				1F4C52E9246EEAEB0085A2D0 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		1F4C52B1246EDB9B0085A2D0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52B0246EDB9B0085A2D0 /* Blitz.app */,
+				1F4C52C5246EDB9C0085A2D0 /* BlitzTests.xctest */,
+				1F4C52D0246EDB9D0085A2D0 /* BlitzUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1F4C52B2246EDB9B0085A2D0 /* Blitz */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */,
+				1F4C52E6246EE2810085A2D0 /* Models */,
+				1F4C52B3246EDB9B0085A2D0 /* AppDelegate.swift */,
+				1F4C52B5246EDB9B0085A2D0 /* ContentView.swift */,
+				1F4C52B7246EDB9C0085A2D0 /* Assets.xcassets */,
+				1F4C52BC246EDB9C0085A2D0 /* Main.storyboard */,
+				1F4C52BF246EDB9C0085A2D0 /* Info.plist */,
+				1F4C52C0246EDB9C0085A2D0 /* Blitz.entitlements */,
+				1F4C52B9246EDB9C0085A2D0 /* Preview Content */,
+				1F4C52E3246EDBF30085A2D0 /* blitz_bindings.h */,
+				1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */,
+				1F4C52E2246EDBF30085A2D0 /* Blitz-Bridging-Header.h */,
+			);
+			path = Blitz;
+			sourceTree = "<group>";
+		};
+		1F4C52B9246EDB9C0085A2D0 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52BA246EDB9C0085A2D0 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		1F4C52C8246EDB9D0085A2D0 /* BlitzTests */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52C9246EDB9D0085A2D0 /* BlitzTests.swift */,
+				1F4C52CB246EDB9D0085A2D0 /* Info.plist */,
+			);
+			path = BlitzTests;
+			sourceTree = "<group>";
+		};
+		1F4C52D3246EDB9D0085A2D0 /* BlitzUITests */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */,
+				1F4C52D6246EDB9D0085A2D0 /* Info.plist */,
+			);
+			path = BlitzUITests;
+			sourceTree = "<group>";
+		};
+		1F4C52E6246EE2810085A2D0 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		1F4C52E9246EEAEB0085A2D0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1F4C52AF246EDB9B0085A2D0 /* Blitz */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F4C52D9246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "Blitz" */;
+			buildPhases = (
+				1F4C52AC246EDB9B0085A2D0 /* Sources */,
+				1F4C52AD246EDB9B0085A2D0 /* Frameworks */,
+				1F4C52AE246EDB9B0085A2D0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Blitz;
+			productName = Blitz;
+			productReference = 1F4C52B0246EDB9B0085A2D0 /* Blitz.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1F4C52C4246EDB9C0085A2D0 /* BlitzTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F4C52DC246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "BlitzTests" */;
+			buildPhases = (
+				1F4C52C1246EDB9C0085A2D0 /* Sources */,
+				1F4C52C2246EDB9C0085A2D0 /* Frameworks */,
+				1F4C52C3246EDB9C0085A2D0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1F4C52C7246EDB9D0085A2D0 /* PBXTargetDependency */,
+			);
+			name = BlitzTests;
+			productName = BlitzTests;
+			productReference = 1F4C52C5246EDB9C0085A2D0 /* BlitzTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		1F4C52CF246EDB9D0085A2D0 /* BlitzUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F4C52DF246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "BlitzUITests" */;
+			buildPhases = (
+				1F4C52CC246EDB9D0085A2D0 /* Sources */,
+				1F4C52CD246EDB9D0085A2D0 /* Frameworks */,
+				1F4C52CE246EDB9D0085A2D0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1F4C52D2246EDB9D0085A2D0 /* PBXTargetDependency */,
+			);
+			name = BlitzUITests;
+			productName = BlitzUITests;
+			productReference = 1F4C52D0246EDB9D0085A2D0 /* BlitzUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F4C52A8246EDB9B0085A2D0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1140;
+				LastUpgradeCheck = 1140;
+				ORGANIZATIONNAME = "Fabian Tamp";
+				TargetAttributes = {
+					1F4C52AF246EDB9B0085A2D0 = {
+						CreatedOnToolsVersion = 11.4.1;
+						LastSwiftMigration = 1140;
+					};
+					1F4C52C4246EDB9C0085A2D0 = {
+						CreatedOnToolsVersion = 11.4.1;
+						TestTargetID = 1F4C52AF246EDB9B0085A2D0;
+					};
+					1F4C52CF246EDB9D0085A2D0 = {
+						CreatedOnToolsVersion = 11.4.1;
+						TestTargetID = 1F4C52AF246EDB9B0085A2D0;
+					};
+				};
+			};
+			buildConfigurationList = 1F4C52AB246EDB9B0085A2D0 /* Build configuration list for PBXProject "Blitz" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1F4C52A7246EDB9B0085A2D0;
+			productRefGroup = 1F4C52B1246EDB9B0085A2D0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1F4C52AF246EDB9B0085A2D0 /* Blitz */,
+				1F4C52C4246EDB9C0085A2D0 /* BlitzTests */,
+				1F4C52CF246EDB9D0085A2D0 /* BlitzUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1F4C52AE246EDB9B0085A2D0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F4C52BE246EDB9C0085A2D0 /* Main.storyboard in Resources */,
+				1F4C52BB246EDB9C0085A2D0 /* Preview Assets.xcassets in Resources */,
+				1F4C52B8246EDB9C0085A2D0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52C3246EDB9C0085A2D0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52CE246EDB9D0085A2D0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1F4C52AC246EDB9B0085A2D0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */,
+				1F4C52B6246EDB9B0085A2D0 /* ContentView.swift in Sources */,
+				1F4C52B4246EDB9B0085A2D0 /* AppDelegate.swift in Sources */,
+				1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52C1246EDB9C0085A2D0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F4C52CA246EDB9D0085A2D0 /* BlitzTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1F4C52CC246EDB9D0085A2D0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1F4C52D5246EDB9D0085A2D0 /* BlitzUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1F4C52C7246EDB9D0085A2D0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1F4C52AF246EDB9B0085A2D0 /* Blitz */;
+			targetProxy = 1F4C52C6246EDB9D0085A2D0 /* PBXContainerItemProxy */;
+		};
+		1F4C52D2246EDB9D0085A2D0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1F4C52AF246EDB9B0085A2D0 /* Blitz */;
+			targetProxy = 1F4C52D1246EDB9D0085A2D0 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		1F4C52BC246EDB9C0085A2D0 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1F4C52BD246EDB9C0085A2D0 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		1F4C52D7246EDB9D0085A2D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LIBRARY_SEARCH_PATHS = ../../target/debug/;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1F4C52D8246EDB9D0085A2D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LIBRARY_SEARCH_PATHS = ../../target/release/;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		1F4C52DA246EDB9D0085A2D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Blitz/Blitz.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_ASSET_PATHS = "\"Blitz/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Blitz/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.Blitz;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Blitz/Blitz-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		1F4C52DB246EDB9D0085A2D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Blitz/Blitz.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_ASSET_PATHS = "\"Blitz/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Blitz/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.Blitz;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "Blitz/Blitz-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		1F4C52DD246EDB9D0085A2D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BlitzTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.BlitzTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blitz.app/Contents/MacOS/Blitz";
+			};
+			name = Debug;
+		};
+		1F4C52DE246EDB9D0085A2D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BlitzTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.BlitzTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Blitz.app/Contents/MacOS/Blitz";
+			};
+			name = Release;
+		};
+		1F4C52E0246EDB9D0085A2D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BlitzUITests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.BlitzUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Blitz;
+			};
+			name = Debug;
+		};
+		1F4C52E1246EDB9D0085A2D0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BlitzUITests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.BlitzUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Blitz;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1F4C52AB246EDB9B0085A2D0 /* Build configuration list for PBXProject "Blitz" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F4C52D7246EDB9D0085A2D0 /* Debug */,
+				1F4C52D8246EDB9D0085A2D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1F4C52D9246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "Blitz" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F4C52DA246EDB9D0085A2D0 /* Debug */,
+				1F4C52DB246EDB9D0085A2D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1F4C52DC246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "BlitzTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F4C52DD246EDB9D0085A2D0 /* Debug */,
+				1F4C52DE246EDB9D0085A2D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1F4C52DF246EDB9D0085A2D0 /* Build configuration list for PBXNativeTarget "BlitzUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F4C52E0246EDB9D0085A2D0 /* Debug */,
+				1F4C52E1246EDB9D0085A2D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1F4C52A8246EDB9B0085A2D0 /* Project object */;
+}
