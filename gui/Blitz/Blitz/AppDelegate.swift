@@ -13,13 +13,15 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     var window: NSWindow!
+    var workspace: Workspace!
     
     @State private var currentImageFilename: String?;
 
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Create the SwiftUI view that provides the window contents.
-        let contentView = ContentView(currentImageFilename: $currentImageFilename);
+        workspace = Workspace();
+        let contentView = ContentView().environmentObject(workspace);
 
         // Create the window and set the content view. 
         window = NSWindow(
@@ -44,6 +46,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return;
         }
         let file = panel.url!.path;
-        self.currentImageFilename = file;
+        self.workspace.setFilename(filename: file);
+    }
+}
+
+class Workspace : ObservableObject {
+    @Published var filename: String? = nil
+    @Published var preview: NSImage? = nil
+    @Published var loaded: Bool = false
+
+    var renderer: Renderer? = nil
+    
+    func setFilename(filename: String) {
+        self.filename = filename;
+        self.renderer = Renderer(fromFilename: filename);
+        self.preview = self.renderer!.loadPreview();
+        self.loaded = true;
     }
 }

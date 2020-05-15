@@ -10,28 +10,24 @@ import SwiftUI
 
 struct ContentView: View {
     
-    @Binding var currentImageFilename: String?;
+    @EnvironmentObject var workspace: Workspace;
     
     var body: some View {
         VStack {
-            if currentImageFilename != nil {
-                Image(nsImage: loadImage(filename: self.currentImageFilename!))
-            } else {
+            if !workspace.loaded {
                 Text("Hi there! Please open a file.")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Image(nsImage: workspace.preview!)
+                    .frame(width: 300, height: 300)
             }
         }
-    }
-    
-    func loadImage(filename: String) -> NSImage {
-        Renderer(fromFilename: filename).loadPreview()
     }
 }
 
 
 struct ContentView_Previews: PreviewProvider {
-    @State static var currentImageFilename: String? = nil;
     static var previews: some View {
-        ContentView(currentImageFilename: self.$currentImageFilename);
+        ContentView().environmentObject(Workspace());
     }
 }
