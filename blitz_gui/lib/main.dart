@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_chooser/file_chooser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +17,8 @@ class MyApp extends StatefulWidget {
 
 class _AppState extends State<MyApp> {
   Color _primaryColor = Colors.blue;
+  Uint8List _image;
+  String title = 'Flutter Demo Home Page';
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +34,10 @@ class _AppState extends State<MyApp> {
         // closer together (more dense) than on mobile platforms.
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(
+        title: title,
+        image: _image,
+        ),
     );
   }
 
@@ -38,6 +45,12 @@ class _AppState extends State<MyApp> {
   void setPrimaryColor(Color color) {
     setState(() {
       _primaryColor = color;
+    });
+  }
+
+  void setImage(Uint8List image) {
+    setState(() {
+      _image = image;
     });
   }
 
@@ -49,6 +62,16 @@ class _AppState extends State<MyApp> {
       ])
     ]);
     print(result.paths);
+    final api = blitz.getApi();
+    if (result.canceled) {
+      return;
+    }
+    final renderer = api.newRenderer(result.paths[0]);
+    final preview = api.loadPreview(renderer);
+    print("HI JPEG");
+    print(preview.length);
+    print(preview.sublist(0,100));
+    setImage(preview);
   }
 
   void updateMenubar() {
@@ -105,18 +128,10 @@ class _AppState extends State<MyApp> {
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  MyHomePage({Key key, this.title, this.image}) : super(key: key);
 
   final String title;
+  final Uint8List image;
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
@@ -127,11 +142,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _incrementCounter() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
       _counter = blitz.getApi().addition(_counter, 2);
     });
   }
@@ -177,6 +187,7 @@ class _MyHomePageState extends State<MyHomePage> {
               '$_counter',
               style: Theme.of(context).textTheme.headline4,
             ),
+            Image.memory(widget.image),
           ],
         ),
       ),

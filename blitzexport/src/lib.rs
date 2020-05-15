@@ -1,5 +1,4 @@
-use blitz;
-use libc::{c_char, c_uchar};
+use libc::c_char;
 use libraw::raf::RafFile;
 use std::ffi::CStr;
 
@@ -29,6 +28,7 @@ pub extern "C" fn raw_renderer_new(filename: *const c_char) -> *mut RawRenderer 
     Box::into_raw(Box::new(RawRenderer::new(c_str.to_str().unwrap())))
 }
 
+#[no_mangle]
 pub extern "C" fn raw_renderer_free(ptr: *mut RawRenderer) {
     if ptr.is_null() {
         return;
@@ -44,7 +44,8 @@ pub struct Buffer {
     len: usize,
 }
 
-pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
+#[no_mangle]
+pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> *mut Buffer {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -53,10 +54,15 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
     let mut buf = content.into_boxed_slice();
     let data = buf.as_mut_ptr();
     let len = buf.len();
-    Buffer { data, len }
+    Box::into_raw(Box::new(Buffer { data, len }))
 }
 
-pub extern "C" fn free_buffer(buf: Buffer) {
+#[no_mangle]
+pub extern "C" fn free_buffer(ptr: *mut Buffer) {
+    if ptr.is_null() {
+        return;
+    }
+    let buf = unsafe { Box::from_raw(ptr) };
     let s = unsafe { std::slice::from_raw_parts_mut(buf.data, buf.len) };
     let s = s.as_mut_ptr();
     unsafe {
