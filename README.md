@@ -1,11 +1,12 @@
 ## Setup
 
+The Xcode Project automatically links the Dylib produced by `cargo build` for the `blitzexport` crate. To build the Rust component:
 
-Copy the dylib to the GUI app:
+```sh
+cargo build
+```
 
-```
-cargo build && cp target/debug/libblitzexport.dylib blitz_gui/build/macos/Build/Products/Debug/blitz_gui.app/Contents/Frameworks
-```
+To build the OSX component, use XCode.
 
 ## Profiling
 
