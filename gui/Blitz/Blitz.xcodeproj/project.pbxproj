@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 52;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -19,6 +19,7 @@
 		1F4C52D5246EDB9D0085A2D0 /* BlitzUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */; };
 		1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */; };
 		1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */; };
+		1FFFDD02247035FF00B7BA1B /* Grid in Frameworks */ = {isa = PBXBuildFile; productRef = 1FFFDD01247035FF00B7BA1B /* Grid */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1FFFDD02247035FF00B7BA1B /* Grid in Frameworks */,
 				1F328F6E247008D00038C890 /* libblitzexport.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -187,6 +189,9 @@
 			dependencies = (
 			);
 			name = Blitz;
+			packageProductDependencies = (
+				1FFFDD01247035FF00B7BA1B /* Grid */,
+			);
 			productName = Blitz;
 			productReference = 1F4C52B0246EDB9B0085A2D0 /* Blitz.app */;
 			productType = "com.apple.product-type.application";
@@ -260,6 +265,9 @@
 				Base,
 			);
 			mainGroup = 1F4C52A7246EDB9B0085A2D0;
+			packageReferences = (
+				1FFFDD00247035FF00B7BA1B /* XCRemoteSwiftPackageReference "swiftui-grid" */,
+			);
 			productRefGroup = 1F4C52B1246EDB9B0085A2D0 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -657,6 +665,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1FFFDD00247035FF00B7BA1B /* XCRemoteSwiftPackageReference "swiftui-grid" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/spacenation/swiftui-grid.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1FFFDD01247035FF00B7BA1B /* Grid */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1FFFDD00247035FF00B7BA1B /* XCRemoteSwiftPackageReference "swiftui-grid" */;
+			productName = Grid;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1F4C52A8246EDB9B0085A2D0 /* Project object */;
 }

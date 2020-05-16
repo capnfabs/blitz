@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Grid
 
 struct ContentView: View {
     
@@ -19,9 +20,9 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text("Opened directory \(workspace.directory!)")
-                List(workspace.previews, id: \.id) { preview in
+                Grid(workspace.previews, id: \.id) { preview in
                     ImageTile(image: preview)
-                }
+                }.gridStyle(ModularGridStyle(columns: .min(200), rows: .fixed(200)))
             }
         }
     }

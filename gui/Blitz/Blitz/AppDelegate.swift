@@ -72,8 +72,6 @@ class Workspace : ObservableObject, Codable {
         self.loaded = true;
     }
     
-    //static final STORAGE_PATH =
-    
     class func getPath() -> URL {
         var path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!;
         path.appendPathComponent("workspace.json");
@@ -91,9 +89,14 @@ class Workspace : ObservableObject, Codable {
     }
     
     func loadPreviews() {
-        // Now load files
+        // Loads all previews for a directory. Is kinda slow, probably because it's happening on the main thread.
         previews.removeAll();
-        previews.append(ImageThumbnail(path: URL(fileURLWithPath: "/Users/fabian/Downloads/camera/raw/DSCF2406.raf")));
+        let fm = FileManager.default
+        
+        let enumerator = fm.enumerator(at: URL(fileURLWithPath: self.directory!), includingPropertiesForKeys: nil)!
+        for file in enumerator.filter({($0 as! URL).path.lowercased().hasSuffix(".raf")}) {
+            previews.append(ImageThumbnail(path: file as! URL))
+        }
     }
     
     class func fromStorage() -> Workspace? {

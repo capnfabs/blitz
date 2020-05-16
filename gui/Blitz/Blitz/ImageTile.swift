@@ -12,15 +12,19 @@ struct ImageTile: View {
     var image: ImageThumbnail;
     
     var body: some View {
-        VStack(alignment: .leading) {
-            Text("LOL \(image.path.lastPathComponent)")
+        VStack {
+            Text(image.path.lastPathComponent)
             
             Image(nsImage: NSImage(data: image.previewBytes)!)
-                .resizable().frame(width: 200, height: 200)
-            Text("lot of bytes: \(image.previewBytes.count)")
-            
-            Text("Hi there")
+                .resizable()
+                .scaledToFit()
+                //.frame(width: 200, height: 200)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.gray, lineWidth: 2)
+        )
     }
 }
 
