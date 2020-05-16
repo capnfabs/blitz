@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import AppKit
 
 class Renderer {
     var renderer: OpaquePointer
@@ -16,10 +15,14 @@ class Renderer {
         self.renderer = raw_renderer_new(filename)!;
     }
     
-    func loadPreview() -> NSImage {
+    func loadPreviewBytes() -> Data {
         let preview = raw_renderer_get_preview(self.renderer);
-        let data = Data(bytesNoCopy: preview.data, count: Int(preview.len), deallocator: Data.Deallocator.custom({(ptr, len) in free_buffer(preview)}));
-        return NSImage(data: data)!;
+        let data = Data(bytesNoCopy: preview.data, count: Int(preview.len), deallocator: .custom({(ptr, len) in
+            print("Dealloc!");
+            free_buffer(Buffer(data: ptr.assumingMemoryBound(to: UInt8.self), len: UInt(len)));
+        }));
+        print("i");
+        return data;
     }
     
     deinit {

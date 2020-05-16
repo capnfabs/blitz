@@ -45,10 +45,13 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
         assert!(!ptr.is_null());
         &mut *ptr
     };
+    // this is a copy
     let content = renderer.file.parse_preview().unwrap().to_vec();
     let mut buf = content.into_boxed_slice();
     let data = buf.as_mut_ptr();
     let len = buf.len();
+    std::mem::forget(buf);
+    println!("Sent: {:p}, {}", data, len);
     Buffer { data, len }
 }
 
@@ -56,6 +59,7 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
 pub extern "C" fn free_buffer(buf: Buffer) {
     let s = unsafe { std::slice::from_raw_parts_mut(buf.data, buf.len) };
     let s = s.as_mut_ptr();
+    println!("Received: {:p}, {}", buf.data, buf.len);
     unsafe {
         Box::from_raw(s);
     }

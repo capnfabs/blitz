@@ -15,11 +15,13 @@ struct ContentView: View {
     var body: some View {
         VStack {
             if !workspace.loaded {
-                Text("Hi there! Please open a file.")
+                Text("Hi there! Please choose a directory.")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Image(nsImage: workspace.preview!)
-                    .frame(width: 300, height: 300)
+                Text("Opened directory \(workspace.directory!)")
+                List(workspace.previews, id: \.id) { preview in
+                    ImageTile(image: preview)
+                }
             }
         }
     }

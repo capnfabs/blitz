@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1F328F62246FEE2F0038C890 /* ImageTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F328F61246FEE2F0038C890 /* ImageTile.swift */; };
+		1F328F64246FEEBB0038C890 /* ImageThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F328F63246FEEBB0038C890 /* ImageThumbnail.swift */; };
+		1F328F6E247008D00038C890 /* libblitzexport.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F328F6D247008CF0038C890 /* libblitzexport.dylib */; };
 		1F4C52B4246EDB9B0085A2D0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52B3246EDB9B0085A2D0 /* AppDelegate.swift */; };
 		1F4C52B6246EDB9B0085A2D0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52B5246EDB9B0085A2D0 /* ContentView.swift */; };
 		1F4C52B8246EDB9C0085A2D0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C52B7246EDB9C0085A2D0 /* Assets.xcassets */; };
@@ -16,7 +19,6 @@
 		1F4C52D5246EDB9D0085A2D0 /* BlitzUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */; };
 		1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */; };
 		1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */; };
-		1F4C52EB246EEAEB0085A2D0 /* libblitzexport.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +39,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1F328F61246FEE2F0038C890 /* ImageTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageTile.swift; sourceTree = "<group>"; };
+		1F328F63246FEEBB0038C890 /* ImageThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageThumbnail.swift; sourceTree = "<group>"; };
+		1F328F6D247008CF0038C890 /* libblitzexport.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libblitzexport.dylib; path = ../../target/debug/libblitzexport.dylib; sourceTree = "<group>"; };
 		1F4C52B0246EDB9B0085A2D0 /* Blitz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Blitz.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F4C52B3246EDB9B0085A2D0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		1F4C52B5246EDB9B0085A2D0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -55,7 +60,6 @@
 		1F4C52E3246EDBF30085A2D0 /* blitz_bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = blitz_bindings.h; sourceTree = "<group>"; };
 		1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = blitz_bindings.c; sourceTree = "<group>"; };
 		1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RendererWrapper.swift; path = Models/RendererWrapper.swift; sourceTree = "<group>"; };
-		1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libblitzexport.a; path = ../../target/debug/libblitzexport.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,7 +67,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1F4C52EB246EEAEB0085A2D0 /* libblitzexport.a in Frameworks */,
+				1F328F6E247008D00038C890 /* libblitzexport.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,6 +124,7 @@
 				1F4C52E3246EDBF30085A2D0 /* blitz_bindings.h */,
 				1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */,
 				1F4C52E2246EDBF30085A2D0 /* Blitz-Bridging-Header.h */,
+				1F328F61246FEE2F0038C890 /* ImageTile.swift */,
 			);
 			path = Blitz;
 			sourceTree = "<group>";
@@ -153,6 +158,7 @@
 		1F4C52E6246EE2810085A2D0 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				1F328F63246FEEBB0038C890 /* ImageThumbnail.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -160,7 +166,7 @@
 		1F4C52E9246EEAEB0085A2D0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				1F4C52EA246EEAEB0085A2D0 /* libblitzexport.a */,
+				1F328F6D247008CF0038C890 /* libblitzexport.dylib */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -297,6 +303,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F328F64246FEEBB0038C890 /* ImageThumbnail.swift in Sources */,
+				1F328F62246FEE2F0038C890 /* ImageTile.swift in Sources */,
 				1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */,
 				1F4C52B6246EDB9B0085A2D0 /* ContentView.swift in Sources */,
 				1F4C52B4246EDB9B0085A2D0 /* AppDelegate.swift in Sources */,
@@ -477,6 +485,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = ../../target/debug/;
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.Blitz;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -500,6 +509,25 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"../../target/release/\nLIBRARY_SEARCH_PATHS",
+					"=",
+					"../../target/debug/\n\n//:completeSettings",
+					"=",
+					"none\n//:configuration",
+					"=",
+					"Debug\nLIBRARY_SEARCH_PATHS",
+					"=",
+					"../../target/debug/\n\n//:completeSettings",
+					"=",
+					"none\n//:configuration",
+					"=",
+					"Debug\nLIBRARY_SEARCH_PATHS",
+					"=",
+					"../../target/debug/\n\n//:completeSettings",
+					"=",
+					"none\n../../target/release",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
 				PRODUCT_BUNDLE_IDENTIFIER = net.capnfabs.Blitz;

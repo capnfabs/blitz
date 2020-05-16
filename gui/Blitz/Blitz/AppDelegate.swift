@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Create the SwiftUI view that provides the window contents.
-        workspace = Workspace();
+        workspace = Workspace.fromStorage() ?? Workspace();
         let contentView = ContentView().environmentObject(workspace);
 
         // Create the window and set the content view. 
@@ -41,26 +41,85 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @IBAction func openDocument(_ sender: Any) {
         print("Hi!!");
         let panel = NSOpenPanel();
+        panel.canChooseDirectories = true;
+        panel.canChooseFiles = false;
         let resp = panel.runModal();
         if resp == NSApplication.ModalResponse.cancel {
             return;
         }
         let file = panel.url!.path;
-        self.workspace.setFilename(filename: file);
+        self.workspace.setDirectory(path: file);
     }
 }
 
-class Workspace : ObservableObject {
-    @Published var filename: String? = nil
-    @Published var preview: NSImage? = nil
+class Workspace : ObservableObject, Codable {
+    @Published var directory: String? = nil
+    @Published var previews: [ImageThumbnail] = []
     @Published var loaded: Bool = false
-
-    var renderer: Renderer? = nil
     
-    func setFilename(filename: String) {
-        self.filename = filename;
-        self.renderer = Renderer(fromFilename: filename);
-        self.preview = self.renderer!.loadPreview();
+    enum CodingKeys: CodingKey {
+        case directory
+    }
+    
+    func setDirectory(path: String) {
+        self.directory = path;
+    
+        // TODO: this is predicated on Workspace being a singleton.
+        saveState();
+        
+        loadPreviews();
+        
         self.loaded = true;
+    }
+    
+    //static final STORAGE_PATH =
+    
+    class func getPath() -> URL {
+        var path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!;
+        path.appendPathComponent("workspace.json");
+        return path;
+    }
+    
+    func saveState() {
+        let encoder = JSONEncoder();
+        do {
+            let data = try encoder.encode(self);
+            try data.write(to: Workspace.getPath())
+        } catch {
+            // TODO
+        }
+    }
+    
+    func loadPreviews() {
+        // Now load files
+        previews.removeAll();
+        previews.append(ImageThumbnail(path: URL(fileURLWithPath: "/Users/fabian/Downloads/camera/raw/DSCF2406.raf")));
+    }
+    
+    class func fromStorage() -> Workspace? {
+        let decoder = JSONDecoder();
+        do {
+            return try decoder.decode(Workspace.self, from: Data(contentsOf: getPath()));
+        } catch {
+            // TODO
+        }
+        return nil;
+    }
+    
+    init() {
+    }
+    
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        directory = try container.decode(String.self, forKey: .directory)
+        if directory != nil {
+            loadPreviews();
+            loaded = true;
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(directory, forKey: .directory)
     }
 }

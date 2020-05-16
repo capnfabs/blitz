@@ -13,4 +13,4 @@ libc = "0.2"
 cbindgen = "0.14.2"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["cdylib"]
