@@ -1,3 +1,4 @@
+use blitz::render::parse_and_render;
 use libc::c_char;
 use libraw::raf::RafFile;
 use std::ffi::CStr;
@@ -39,6 +40,16 @@ pub struct Buffer {
     len: usize,
 }
 
+impl Buffer {
+    fn from_byte_vec(byte_vec: Vec<u8>) -> Buffer {
+        let mut buf = byte_vec.into_boxed_slice();
+        let data = buf.as_mut_ptr();
+        let len = buf.len();
+        std::mem::forget(buf);
+        Buffer { data, len }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
     let renderer = unsafe {
@@ -46,20 +57,22 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
         &mut *ptr
     };
     // this is a copy
-    let content = renderer.file.parse_preview().unwrap().to_vec();
-    let mut buf = content.into_boxed_slice();
-    let data = buf.as_mut_ptr();
-    let len = buf.len();
-    std::mem::forget(buf);
-    println!("Sent: {:p}, {}", data, len);
-    Buffer { data, len }
+    return Buffer::from_byte_vec(renderer.file.parse_preview().unwrap().to_vec());
+}
+
+#[no_mangle]
+pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
+    let renderer = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+    return Buffer::from_byte_vec(parse_and_render(&renderer.file).into_vec());
 }
 
 #[no_mangle]
 pub extern "C" fn free_buffer(buf: Buffer) {
     let s = unsafe { std::slice::from_raw_parts_mut(buf.data, buf.len) };
     let s = s.as_mut_ptr();
-    println!("Received: {:p}, {}", buf.data, buf.len);
     unsafe {
         Box::from_raw(s);
     }

@@ -17,12 +17,21 @@ class Renderer {
     
     func loadPreviewBytes() -> Data {
         let preview = raw_renderer_get_preview(self.renderer);
-        let data = Data(bytesNoCopy: preview.data, count: Int(preview.len), deallocator: .custom({(ptr, len) in
-            print("Dealloc!");
+        return Renderer.toData(preview);
+        
+    }
+    
+    private static func toData(_ buffer: Buffer) -> Data {
+        print("Referencing  \(buffer.len) bytes at \(buffer.data)")
+        return Data(bytesNoCopy: buffer.data, count: Int(buffer.len), deallocator: .custom({(ptr, len) in
+            print("Dropping \(len) bytes at \(ptr)")
             free_buffer(Buffer(data: ptr.assumingMemoryBound(to: UInt8.self), len: UInt(len)));
         }));
-        print("i");
-        return data;
+    }
+    
+    func render() -> Data {
+        let result = raw_renderer_render_image(self.renderer);
+        return Renderer.toData(result)
     }
     
     deinit {

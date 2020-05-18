@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var window: NSWindow!
     var workspace: Workspace!
+    var renderCache: RenderCache!
     
     @State private var currentImageFilename: String?;
 
@@ -21,7 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Create the SwiftUI view that provides the window contents.
         workspace = Workspace.fromStorage() ?? Workspace();
-        let contentView = ContentView().environmentObject(workspace);
+        renderCache = RenderCache();
+        let contentView = ContentView(renderCache: renderCache).environmentObject(workspace);
 
         // Create the window and set the content view. 
         window = NSWindow(

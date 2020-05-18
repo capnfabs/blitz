@@ -2,12 +2,12 @@
   "object": {
     "pins": [
       {
-        "package": "Grid",
-        "repositoryURL": "https://github.com/spacenation/swiftui-grid.git",
+        "package": "QGrid",
+        "repositoryURL": "https://github.com/Q-Mobile/QGrid",
         "state": {
           "branch": null,
-          "revision": "a3441f80bd01029507bc19e463e7c7208ffcf3f9",
-          "version": "1.0.4"
+          "revision": "804e59f8cb9f66b226685e9369fb82029742b83a",
+          "version": "0.1.4"
         }
       }
     ]
