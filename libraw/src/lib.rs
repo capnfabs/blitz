@@ -4,6 +4,7 @@ pub mod fuji_compressed;
 pub mod griditer;
 pub mod raf;
 pub mod tiff;
+pub mod tifflabels;
 pub mod util;
 
 #[macro_use]

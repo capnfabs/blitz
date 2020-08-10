@@ -6,6 +6,7 @@ use libraw::tiff::{parse_ifd, FieldType, IfdEntry, TiffFile};
 use memmap::Mmap;
 
 use libraw::raf::RafFile;
+use libraw::tifflabels::label_for_tiff_field;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fs::File;
@@ -100,9 +101,15 @@ fn dump_entries(tags: &[u16], file: &TiffFile, parsed: &[IfdEntry], dump_all_dat
 
             let offset = entry.val_as_offset();
 
+            let tag_label: String = label_for_tiff_field(entry.tag)
+                .unwrap_or("[??]")
+                .chars()
+                .take(30)
+                .collect();
+
             print!(
-                "Tag: {:X}, Type: {:?}, Count: {}",
-                entry.tag, entry.field_type, entry.count
+                "{:<30} Tag: {:X}, Type: {:?}, Count: {}",
+                &tag_label, entry.tag, entry.field_type, entry.count
             );
 
             if let Some(offset) = offset {
