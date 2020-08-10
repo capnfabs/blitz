@@ -7,6 +7,18 @@
 //
 
 import Foundation
+import AppKit
+
+
+extension Buffer {
+    func toData() -> Data {
+        print("Referencing  \(self.len) bytes at \(self.data!)")
+        return Data(bytesNoCopy: self.data, count: Int(self.len), deallocator: .custom({(ptr, len) in
+            print("Dropping \(len) bytes at \(ptr)")
+            free_buffer(Buffer(data: ptr.assumingMemoryBound(to: UInt8.self), len: UInt(len)));
+        }));
+    }
+}
 
 class Renderer {
     var renderer: OpaquePointer
@@ -17,24 +29,32 @@ class Renderer {
     
     func loadPreviewBytes() -> Data {
         let preview = raw_renderer_get_preview(self.renderer);
-        return Renderer.toData(preview);
+        return preview.toData();
         
-    }
-    
-    private static func toData(_ buffer: Buffer) -> Data {
-        print("Referencing  \(buffer.len) bytes at \(buffer.data)")
-        return Data(bytesNoCopy: buffer.data, count: Int(buffer.len), deallocator: .custom({(ptr, len) in
-            print("Dropping \(len) bytes at \(ptr)")
-            free_buffer(Buffer(data: ptr.assumingMemoryBound(to: UInt8.self), len: UInt(len)));
-        }));
     }
     
     func render() -> Data {
         let result = raw_renderer_render_image(self.renderer);
-        return Renderer.toData(result)
+        return result.toData()
     }
     
     deinit {
         raw_renderer_free(self.renderer);
+    }
+}
+
+extension Data {
+    func toNSImage() -> NSImage {
+        let rep = self.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
+            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
+            let wut = [imgptr]
+            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
+                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
+                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: 6000, pixelsHigh: 4000, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 6000*3, bitsPerPixel: 24)!
+            }
+        }
+        let img = NSImage()
+        img.addRepresentation(rep)
+        return img
     }
 }

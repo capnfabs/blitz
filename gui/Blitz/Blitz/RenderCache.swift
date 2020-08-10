@@ -8,7 +8,7 @@
 
 import Foundation
 
-class RenderCache {
+class RenderCache: ObservableObject {
     
     var storage : [URL: Data] = [:]
     

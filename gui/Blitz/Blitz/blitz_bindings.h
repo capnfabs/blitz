@@ -10,6 +10,10 @@ typedef struct {
   uintptr_t len;
 } Buffer;
 
+typedef struct {
+  float tone_curve[10];
+} RenderSettings;
+
 void free_buffer(Buffer buf);
 
 void raw_renderer_free(RawRenderer *ptr);
@@ -19,3 +23,5 @@ Buffer raw_renderer_get_preview(RawRenderer *ptr);
 RawRenderer *raw_renderer_new(const char *filename);
 
 Buffer raw_renderer_render_image(RawRenderer *ptr);
+
+Buffer raw_renderer_render_with_settings(RawRenderer *ptr, const RenderSettings *settings);

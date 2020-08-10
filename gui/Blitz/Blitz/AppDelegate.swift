@@ -22,8 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Create the SwiftUI view that provides the window contents.
         workspace = Workspace.fromStorage() ?? Workspace();
-        renderCache = RenderCache();
-        let contentView = ContentView(renderCache: renderCache).environmentObject(workspace);
+        let contentView = ContentView().environmentObject(workspace);
 
         // Create the window and set the content view. 
         window = NSWindow(
@@ -49,13 +48,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if resp == NSApplication.ModalResponse.cancel {
             return;
         }
-        let file = panel.url!.path;
+        let file = panel.url!;
         self.workspace.setDirectory(path: file);
     }
 }
 
 class Workspace : ObservableObject, Codable {
-    @Published var directory: String? = nil
+    @Published var directory: URL? = nil
     @Published var previews: [ImageThumbnail] = []
     @Published var loaded: Bool = false
     
@@ -63,7 +62,7 @@ class Workspace : ObservableObject, Codable {
         case directory
     }
     
-    func setDirectory(path: String) {
+    func setDirectory(path: URL) {
         self.directory = path;
     
         // TODO: this is predicated on Workspace being a singleton.
@@ -80,7 +79,7 @@ class Workspace : ObservableObject, Codable {
         return path;
     }
     
-    func saveState() {
+    private func saveState() {
         let encoder = JSONEncoder();
         do {
             let data = try encoder.encode(self);
@@ -90,12 +89,12 @@ class Workspace : ObservableObject, Codable {
         }
     }
     
-    func loadPreviews() {
+    private func loadPreviews() {
         // Loads all previews for a directory. Is kinda slow, probably because it's happening on the main thread.
         previews.removeAll();
         let fm = FileManager.default
         
-        let enumerator = fm.enumerator(at: URL(fileURLWithPath: self.directory!), includingPropertiesForKeys: nil)!
+        let enumerator = fm.enumerator(at: self.directory!, includingPropertiesForKeys: nil)!
         for file in enumerator.filter({($0 as! URL).path.lowercased().hasSuffix(".raf")}) {
             previews.append(ImageThumbnail(path: file as! URL))
         }
@@ -104,8 +103,11 @@ class Workspace : ObservableObject, Codable {
     class func fromStorage() -> Workspace? {
         let decoder = JSONDecoder();
         do {
-            return try decoder.decode(Workspace.self, from: Data(contentsOf: getPath()));
+            let path = getPath()
+            print("Attempting load from \(path)")
+            return try decoder.decode(Workspace.self, from: Data(contentsOf: path));
         } catch {
+            print("Load failed.")
             // TODO
         }
         return nil;
@@ -116,7 +118,7 @@ class Workspace : ObservableObject, Codable {
     
     required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        directory = try container.decode(String.self, forKey: .directory)
+        directory = try container.decode(URL.self, forKey: .directory)
         if directory != nil {
             loadPreviews();
             loaded = true;

@@ -50,6 +50,11 @@ impl Buffer {
     }
 }
 
+#[repr(C)]
+pub struct RenderSettings {
+    tone_curve: [f32; 10],
+}
+
 #[no_mangle]
 pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
     let renderer = unsafe {
@@ -62,6 +67,18 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
 
 #[no_mangle]
 pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
+    let renderer = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+    return Buffer::from_byte_vec(parse_and_render(&renderer.file).into_vec());
+}
+
+#[no_mangle]
+pub extern "C" fn raw_renderer_render_with_settings(
+    ptr: *mut RawRenderer,
+    settings: &RenderSettings,
+) -> Buffer {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr

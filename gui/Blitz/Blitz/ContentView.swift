@@ -10,63 +10,122 @@ import SwiftUI
 import QGrid
 
 struct ContentView: View {
-    
+
+    @State private var currentImage: AsyncImage?
     @EnvironmentObject var workspace: Workspace;
-    var renderCache: RenderCache;
     
     var body: some View {
-        NavigationView {
-            VStack {
-                if !workspace.loaded {
-                    Text("Hi there! Please choose a directory.")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    Text("Opened directory \(workspace.directory!)")
-                    QGrid(workspace.previews, columns: 4, isScrollable: true, showScrollIndicators: true) { preview in
-                        NavigationLink(destination: self.destinationForItem(preview)) {
-                            ImageTile(image: preview).frame(minWidth: 200, minHeight: 200)
-                        }.buttonStyle(PlainButtonStyle())
-                    }.frame(minWidth: 0, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+        Group {
+            if !workspace.loaded {
+                Text("Hi there! Please choose a directory.")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HSplitView{
+                    LibraryView(onSelect: {thumb in
+                        print("Selected: \(thumb.path)")
+                        self.currentImage = AsyncImage(thumb.renderer)
+                        self.currentImage!.load()
+                    }, minimalMode: detailExpanded())
+                    if (detailExpanded()) {
+                        DetailView(image: currentImage!)
+                    }
                 }
             }
         }
     }
-    
-    func destinationForItem(_ item: ImageThumbnail) -> some View
-    {
-        ImageDetail(image: item.rendered)
+
+    func detailExpanded() -> Bool {
+        return currentImage != nil
     }
 }
 
-struct ImageDetail: View {
-    @ObservedObject var image: AsyncImage;
+struct LibraryView: View {
+    @EnvironmentObject var workspace: Workspace;
+    let onSelect: (ImageThumbnail) -> Void
+    let minimalMode: Bool
+    
     var body: some View {
-        Group {
-            if image.image != nil {
-                Image(nsImage: render(image.image!))
-                    .resizable()
-            } else {
-                Text("LOADING, STANDBY")
+        VStack {
+            Text("Directory: \(self.workspace.directory!.path)")
+            QGrid(self.workspace.previews, columns: self.minimalMode ? 1 : 4, isScrollable: true, showScrollIndicators: true) { preview in
+                Button(action: { self.onSelect(preview) }){
+                    ImageTile(image: preview)
+                }.buttonStyle(PlainButtonStyle())
             }
-        }.onAppear {
-            self.image.load()
-        }.onDisappear() {
-            self.image.cancel()
+        }.frame(minWidth: 200, maxWidth: self.minimalMode ? 400 : .infinity, minHeight: 400, maxHeight: .infinity)
+    }
+}
+
+struct DetailView: View {
+    @ObservedObject var image: AsyncImage;
+    // TODO: Something to make this size consistently regardless of whether there's already a view or not.
+    var body: some View {
+        return VStack {
+            Group {
+                if image.image != nil {
+                    Image(nsImage: image.image!.toNSImage())
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Text("Loading; stand by...")
+                    .padding(20)
+                }
+            }
+            RenderControlsView()
+        }
+        .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+    }
+}
+
+struct RenderControlsView: View {
+    @State var curve0: Double = 0
+    @State var curve1: Double = 0
+    @State var curve2: Double = 0
+    @State var curve3: Double = 0
+    @State var curve4: Double = 0
+    
+    var body: some View {
+        VStack {
+            Text("Slidey bois! \(curve0)")
+            HStack {
+                SlideyBoi(value: $curve0)
+                SlideyBoi(value: $curve1)
+                SlideyBoi(value: $curve2)
+                SlideyBoi(value: $curve3)
+                SlideyBoi(value: $curve4)
+            }
         }
     }
+}
+
+class SlideyCoordinator: NSObject {
+
+    @Binding var value: Double
+
+    init(value: Binding<Double>) {
+        _value = value
+    }
     
-    func render(_ image: Data) -> NSImage {
-        let rep = image.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
-            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
-            let wut = [imgptr]
-            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
-                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
-                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: 6000, pixelsHigh: 4000, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 6000*3, bitsPerPixel: 24)!
-            }
-        }
-        let img = NSImage()
-        img.addRepresentation(rep)
-        return img
+    @objc func valueChanged(_ sender: NSSlider) {
+        self.value = sender.doubleValue
+    }
+}
+
+struct SlideyBoi: NSViewRepresentable {
+    @Binding var value: Double
+    
+    func makeCoordinator() -> SlideyCoordinator {
+        return SlideyCoordinator(value: $value)
+    }
+    
+    func makeNSView(context: Context) -> NSSlider {
+        let slider = NSSlider(value: self.value, minValue: -5, maxValue: 5, target: context.coordinator, action: #selector(SlideyCoordinator.valueChanged))
+        slider.isVertical = true
+        return slider
+    }
+
+    func updateNSView(_ nsView: NSSlider, context: Context) {
+        nsView.doubleValue = value
     }
 }
 
@@ -105,6 +164,6 @@ struct ImageTile_Previews: PreviewProvider {
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView(renderCache: RenderCache()).environmentObject(Workspace());
+        ContentView().environmentObject(Workspace());
     }
 }

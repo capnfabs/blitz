@@ -15,19 +15,17 @@ struct ImageThumbnail: Identifiable {
     var previewBytes: Data
     var renderer: Renderer
     
-    var rendered: AsyncImage
-    
     init(path: URL) {
         self.path = path;
         self.renderer = Renderer(fromFilename: path.path)
         self.previewBytes = self.renderer.loadPreviewBytes();
-        self.rendered = AsyncImage(self.renderer)
     }
 }
 
 class AsyncImage : ObservableObject {
     @Published var image: Data?
     var renderer: Renderer
+    private var loading = false
     
     init(_ renderer: Renderer) {
         self.renderer = renderer
@@ -35,16 +33,21 @@ class AsyncImage : ObservableObject {
     
     
     func load() {
-        DispatchQueue.global().async {
-            let bytes = self.renderer.render()
-            DispatchQueue.main.async {
-                self.image = bytes
+        print("Loading...")
+        if image == nil && !loading {
+            loading = true
+            DispatchQueue.global().async {
+                let bytes = self.renderer.render()
+                DispatchQueue.main.async {
+                    self.image = bytes
+                    self.loading = false
+                }
             }
         }
     }
 
     func cancel() {
-        // Not implemented
+        // Ignored
     }
     
 }
