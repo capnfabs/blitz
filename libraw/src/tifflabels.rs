@@ -1,8 +1,59 @@
-pub fn label_for_tiff_field(id: u16) -> Option<&'static str> {
-    let noexist = "SENTINEL_NOEXIST";
-    let label = match id {
-        // JPEG Part:
-        // IFD #0
+#[derive(Debug, Clone, Copy)]
+pub enum TagPath {
+    PreviewJpeg,
+    PreviewExif,
+    PreviewExifMakerNotes,
+    Raw,
+}
+
+const NOEXIST: &'static str = "SENTINEL_NOEXIST";
+
+pub fn label_for_tag(context: TagPath, tag_id: u16) -> Option<&'static str> {
+    let func = match context {
+        TagPath::PreviewJpeg => label_for_jpeg_tag,
+        TagPath::PreviewExif => label_for_exif_field,
+        TagPath::PreviewExifMakerNotes => label_for_maker_notes,
+        TagPath::Raw => label_for_raw,
+    };
+    let label = func(tag_id);
+    if label != NOEXIST {
+        Some(label)
+    } else {
+        None
+    }
+}
+
+fn label_for_raw(id: u16) -> &'static str {
+    match id {
+        0xF000 => "Fuji RAW Section Pointer",
+        // -----------
+        // !!SubIFD from tag F000!!
+        0xF001 => "FujiRafWidth",
+        0xF002 => "FujiRafHeight",
+        0xF003 => "FujiRafBitsPerPixel",
+        0xF004 => "", // ??
+        0xF005 => "", // ?
+        0xF006 => "", // ?
+        0xF007 => "FujiRafRawDataOffset",
+        0xF008 => "FujiRafRawDataLength", // Bytes
+        0xF009 => "FujiRafRawEncodingType",
+        0xF00A => "FujiRafBlackLevelPattern",
+        0xF00B => "??FujiRafSomeUnidentifiedCurve51", // ??
+        0xF00C => "[Maybe]FujiRafColorCalibration",
+        0xF00D => "[Maybe]FujiRafWhiteBalCoefficients1",
+        0xF00E => "[Maybe]FujiRafWhiteBalCoefficients2",
+        0xF00F => "??FujiRafSomeUnidentifiedCurve55",
+        0xF010 => "FujiRafVignetteProfile",
+        _ => NOEXIST,
+    }
+}
+
+fn label_for_maker_notes(id: u16) -> &'static str {
+    "TODO"
+}
+
+fn label_for_jpeg_tag(id: u16) -> &'static str {
+    match id {
         0x110 => "Model",
         0x112 => "Orientation", // Enum
         0x11A => "XResolution",
@@ -15,20 +66,12 @@ pub fn label_for_tiff_field(id: u16) -> Option<&'static str> {
         0x8298 => "Copyright",
         0x8769 => "Exif IFD Pointer",
         0xC4A5 => "", // ??
-        // -----------
-        // IFD #1
-        // TODO: these tag IDs have different meanings in the two IFDs, and we need to distinguish between them by allowing callers to pass in some kind of context argument.
-        0x103 => "Compression", // ?
-        0x112 => "",
-        0x11A => "",
-        0x11B => "",
-        0x128 => "",
-        0x13B => "",
-        0x201 => "",
-        0x202 => "",
-        0x213 => "",
-        // -----------
-        // !!SubIFD from tag 8769!!
+        _ => NOEXIST,
+    }
+}
+
+fn label_for_exif_field(id: u16) -> &'static str {
+    match id {
         0x829A => "ExposureTime",
         0x829D => "FNumber",
         0x8822 => "ExposureProgram",
@@ -73,35 +116,6 @@ pub fn label_for_tiff_field(id: u16) -> Option<&'static str> {
         0xA433 => "LensMake",
         0xA434 => "LensModel",
         0xA435 => "LensSerialNumber",
-        // --!!SubIFD from tag 8769!!--
-        // -----------
-        // Raw Part:
-        0xF000 => "Fuji RAW Section Pointer",
-        // -----------
-        // !!SubIFD from tag F000!!
-        0xF001 => "FujiRafWidth",
-        0xF002 => "FujiRafHeight",
-        0xF003 => "FujiRafBitsPerPixel",
-        0xF004 => "", // ??
-        0xF005 => "", // ?
-        0xF006 => "", // ?
-        0xF007 => "FujiRafRawDataOffset",
-        0xF008 => "FujiRafRawDataLength", // Bytes
-        0xF009 => "FujiRafRawEncodingType",
-        0xF00A => "FujiRafBlackLevelPattern",
-        0xF00B => "??FujiRafSomeUnidentifiedCurve51", // ??
-        0xF00C => "[Maybe]FujiRafColorCalibration",
-        0xF00D => "[Maybe]FujiRafWhiteBalCoefficients1",
-        0xF00E => "[Maybe]FujiRafWhiteBalCoefficients2",
-        0xF00F => "??FujiRafSomeUnidentifiedCurve55",
-        0xF010 => "FujiRafVignetteProfile",
-        // --!!SubIFD from tag F000!!--
-        // -----------
-        _ => noexist,
-    };
-    if label != noexist {
-        Some(label)
-    } else {
-        None
+        _ => NOEXIST,
     }
 }
