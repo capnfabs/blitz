@@ -257,10 +257,12 @@ impl<'a> IfdEntry<'a> {
 }
 
 impl<'a> TiffFile<'a> {
+    // Returns a Vec<T> from loading the data at the offset / length in the given IFD entry.
     pub fn load_offset_data<T: Parseable>(&self, ifd_entry: &IfdEntry<'a>) -> Option<Vec<T>> {
         ifd_entry.load_from_offset(self.data)
     }
 
+    // Returns a byte slice corresponding to the offset + length in the given IFD entry
     pub fn data_for_ifd_entry(&self, ifd_entry: &'a IfdEntry) -> &'a [u8] {
         let byte_size = ifd_entry.count as usize * ifd_entry.field_type.type_size().unwrap_or(1);
         if byte_size <= 4 {
@@ -303,9 +305,16 @@ pub fn parse_ifd(input: I) -> IResult<I, (Ifd, Option<usize>)> {
 }
 
 pub fn parse_tiff(input: I) -> IResult<I, TiffFile> {
-    let (_i, (_tag, first_ifd_offset)) = tuple((tag(b"II*\0"), le_u32))(input)?;
+    parse_tiff_flex_prefix(b"II*\0", input)
+}
+
+pub fn parse_tiff_flex_prefix<'b>(prefix: &'_ [u8], input: I<'b>) -> IResult<I<'b>, TiffFile<'b>> {
+    println!("trying with prefix {:X?}", prefix);
+    println!("input is {:X?}", &input[0..100]);
+    let (_i, (_tag, first_ifd_offset)) = tuple((tag(prefix), le_u32))(input)?;
     let mut ifds = Vec::new();
     let mut ifd_offset = first_ifd_offset as usize;
+    println!("ok working, prefix {:?}", prefix);
     loop {
         // relative to base of TIFF file
         let ifd_input = &input[(ifd_offset as usize)..];

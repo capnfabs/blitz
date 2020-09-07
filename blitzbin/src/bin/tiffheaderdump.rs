@@ -2,9 +2,10 @@ use clap::{App, Arg};
 
 use libraw::tiff;
 
-use libraw::tiff::{parse_ifd, FieldType, IfdEntry, TiffFile};
+use libraw::tiff::{parse_ifd, parse_tiff_flex_prefix, FieldType, IfdEntry, TiffFile};
 use memmap::Mmap;
 
+use itertools::Itertools;
 use libraw::raf::RafFile;
 use libraw::tifflabels::{label_for_tag, TagPath};
 use std::convert::TryInto;
@@ -93,6 +94,25 @@ fn dump_tiff_details(context: TagPath, tags: &[u16], print_all_data: bool, data:
                 context
             };
             dump_entries(subcontext, tags, &file, &parsed, print_all_data);
+
+            if entry.tag == 0x8769 {
+                // Might have Makernotes
+                if let Ok(makernotes) = parsed.iter().filter(|tag| tag.tag == 0x927C).exactly_one()
+                {
+                    println!("Makernote {:X?}", makernotes);
+                    let makernotes_content: &[u8] = file.data_for_ifd_entry(makernotes);
+                    let (_, makernotes_tiff) =
+                        parse_tiff_flex_prefix(b"FUJIFILM", &makernotes_content).unwrap();
+                    assert_eq!(makernotes_tiff.ifds.len(), 1);
+                    dump_entries(
+                        TagPath::PreviewExifMakerNotes,
+                        tags,
+                        &makernotes_tiff,
+                        &makernotes_tiff.ifds[0],
+                        print_all_data,
+                    );
+                }
+            }
         }
     }
 }
@@ -122,7 +142,7 @@ fn dump_entries(
                 .collect();
 
             print!(
-                "{:<30} Tag: {:X}, Type: {:?}, Count: {}",
+                "{:<30} Tag: {:04X}, Type: {:?}, Count: {}",
                 &tag_label, entry.tag, entry.field_type, entry.count
             );
 

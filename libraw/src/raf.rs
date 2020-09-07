@@ -428,7 +428,7 @@ fn parse_tiffish(raw: &[u8]) -> IResult<I, TiffishData> {
 }
 
 fn parse_preview(input: I) -> IResult<I, &[u8]> {
-    let (i, (header, offsets)) = tuple((header, offset_sizes))(input)?;
+    let (i, (_header, offsets)) = tuple((header, offset_sizes))(input)?;
     Ok((i, offsets.jpeg.apply(input)))
 }
 
