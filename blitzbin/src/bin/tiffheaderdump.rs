@@ -6,7 +6,6 @@ use libraw::tiff::{parse_ifd, FieldType, IfdEntry, TiffFile};
 use memmap::Mmap;
 
 use libraw::raf::RafFile;
-use libraw::tifflabels::TagPath::{PreviewExifMakerNotes, PreviewJpeg};
 use libraw::tifflabels::{label_for_tag, TagPath};
 use std::convert::TryInto;
 use std::error::Error;
@@ -49,15 +48,13 @@ fn hexdec(data: &str) -> Result<u16, Box<dyn Error>> {
 }
 
 fn main_command(img_file: &str, tags: &[u16], print_all_data: bool) {
-    println!("Opening file: {:?}", img_file);
-
     if img_file.to_lowercase().ends_with(".raf") {
         println!("Treating as RAF File");
         let raf = RafFile::open(img_file).unwrap();
         let offsets = raf.file_parts().unwrap();
         println!("JPEG Part:");
         dump_tiff_details(
-            TagPath::PreviewJpeg,
+            TagPath::PreviewExif,
             tags,
             print_all_data,
             offsets.jpeg_exif_tiff,
@@ -67,10 +64,11 @@ fn main_command(img_file: &str, tags: &[u16], print_all_data: bool) {
         dump_tiff_details(TagPath::Raw, tags, print_all_data, offsets.raw);
         println!("-----------");
     } else {
+        // Should be treated as a DNG probably
         let file = File::open(img_file).unwrap();
         let mmap = unsafe { Mmap::map(&file) }.unwrap();
         // TODO: choice of TagPath here is wrong; fix it.
-        dump_tiff_details(TagPath::PreviewJpeg, tags, print_all_data, &mmap);
+        dump_tiff_details(TagPath::PreviewExif, tags, print_all_data, &mmap);
     }
 }
 
@@ -89,14 +87,12 @@ fn dump_tiff_details(context: TagPath, tags: &[u16], print_all_data: bool, data:
             let offset = entry.val_u32().unwrap() as usize;
             let subifd = &data[offset..];
             let (_, (parsed, _)) = parse_ifd(subifd).unwrap();
-            println!("!!SubIFD from tag {:X}!!", entry.tag);
             let subcontext = if entry.tag == 0x8769 {
                 TagPath::PreviewExif
             } else {
                 context
             };
             dump_entries(subcontext, tags, &file, &parsed, print_all_data);
-            println!("--!!SubIFD from tag {:X}!!--", entry.tag);
         }
     }
 }

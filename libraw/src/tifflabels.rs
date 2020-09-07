@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, Copy)]
 pub enum TagPath {
-    PreviewJpeg,
     PreviewExif,
     PreviewExifMakerNotes,
     Raw,
@@ -10,7 +9,6 @@ const NOEXIST: &'static str = "SENTINEL_NOEXIST";
 
 pub fn label_for_tag(context: TagPath, tag_id: u16) -> Option<&'static str> {
     let func = match context {
-        TagPath::PreviewJpeg => label_for_jpeg_tag,
         TagPath::PreviewExif => label_for_exif_field,
         TagPath::PreviewExifMakerNotes => label_for_maker_notes,
         TagPath::Raw => label_for_raw,
@@ -26,23 +24,27 @@ pub fn label_for_tag(context: TagPath, tag_id: u16) -> Option<&'static str> {
 fn label_for_raw(id: u16) -> &'static str {
     match id {
         0xF000 => "Fuji RAW Section Pointer",
-        // -----------
-        // !!SubIFD from tag F000!!
         0xF001 => "FujiRafWidth",
         0xF002 => "FujiRafHeight",
         0xF003 => "FujiRafBitsPerPixel",
-        0xF004 => "", // ??
-        0xF005 => "", // ?
-        0xF006 => "", // ?
+        // F004-F006 are present in my RAF files, but they're all zeros, and
+        // exiftool doesn't know about them.
+        0xF004 => "[reserved]",
+        0xF005 => "[reserved]",
+        0xF006 => "[reserved]",
         0xF007 => "FujiRafRawDataOffset",
         0xF008 => "FujiRafRawDataLength", // Bytes
         0xF009 => "FujiRafRawEncodingType",
         0xF00A => "FujiRafBlackLevelPattern",
-        0xF00B => "??FujiRafSomeUnidentifiedCurve51", // ??
+        0xF00B => "FujiRafGeometricDistortionParams", // according to exiftool
+        // These are in the form [Green Red Blue EXIF_LIGHT_SOURCE_CODE]
+        // See https://www.awaresystems.be/imaging/tiff/tifftags/privateifd/exif/lightsource.html
+        // Notably, 17 and 21 are Standard Light A and D65
         0xF00C => "[Maybe]FujiRafColorCalibration",
-        0xF00D => "[Maybe]FujiRafWhiteBalCoefficients1",
-        0xF00E => "[Maybe]FujiRafWhiteBalCoefficients2",
-        0xF00F => "??FujiRafSomeUnidentifiedCurve55",
+        0xF00D => "FujiRafWhiteBalCoefficentsAuto",
+        // I *think* these are user-selected white bal coefficients, but I'm not sure.
+        0xF00E => "FujiRafWhiteBalCoefficentsSelected",
+        0xF00F => "FujiRafChromaticAberrationParams", // according to Exiftool
         0xF010 => "FujiRafVignetteProfile",
         _ => NOEXIST,
     }
@@ -52,8 +54,10 @@ fn label_for_maker_notes(id: u16) -> &'static str {
     "TODO"
 }
 
-fn label_for_jpeg_tag(id: u16) -> &'static str {
+fn label_for_exif_field(id: u16) -> &'static str {
     match id {
+        0x103 => "Compression",
+        0x10F => "Make",
         0x110 => "Model",
         0x112 => "Orientation", // Enum
         0x11A => "XResolution",
@@ -65,13 +69,7 @@ fn label_for_jpeg_tag(id: u16) -> &'static str {
         0x213 => "YCbCrPositioning",
         0x8298 => "Copyright",
         0x8769 => "Exif IFD Pointer",
-        0xC4A5 => "", // ??
-        _ => NOEXIST,
-    }
-}
-
-fn label_for_exif_field(id: u16) -> &'static str {
-    match id {
+        0xC4A5 => "?? PrintIM", // Starts with Magic String PrintIM, exiftool doesn't know what it is either
         0x829A => "ExposureTime",
         0x829D => "FNumber",
         0x8822 => "ExposureProgram",
@@ -116,6 +114,10 @@ fn label_for_exif_field(id: u16) -> &'static str {
         0xA433 => "LensMake",
         0xA434 => "LensModel",
         0xA435 => "LensSerialNumber",
+        // as per Exiftool, "Thumbnail Offset", but this is only true on IFD 1 in the Exif
+        0x0201 => "JPEGInterchangeFormat", // from Exif spec
+        // as per Exiftool, "Thumbnail Length", but this is only true on IFD 1 in the Exif
+        0x0202 => "JPEGInterchangeFormatLength", // from Exif spec
         _ => NOEXIST,
     }
 }
