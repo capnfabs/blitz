@@ -1,6 +1,7 @@
 #![allow(clippy::just_underscores_and_digits, clippy::too_many_arguments)]
 
 pub mod fuji_compressed;
+pub mod fuji_meta;
 pub mod griditer;
 pub mod raf;
 pub mod tiff;
@@ -15,6 +16,12 @@ extern crate data_encoding_macro;
 
 #[macro_use]
 extern crate ndarray;
+
+#[macro_use]
+extern crate num_derive;
+
+#[macro_use]
+extern crate lazy_static;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Color {

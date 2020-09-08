@@ -5,13 +5,28 @@ use nom::multi::count;
 use nom::number::complete::{le_i32, le_u16, le_u32};
 use nom::sequence::tuple;
 use nom::IResult;
+use std::collections::HashSet;
 use std::convert::TryInto;
+use std::iter::Flatten;
 use std::marker::PhantomData;
 use tristate::TriState;
 
 pub type I<'a> = &'a [u8];
 
+pub const MAKERNOTES_TAG_ID: u16 = 0x927C;
+
+lazy_static! {
+    pub static ref NESTED_IFD_TAGS: HashSet<u16> =
+        [
+            0x014A,  // ?? Probably DNG-ish
+            0xF000, // Fuji RAW Section Pointer
+            0xA005, // Interoperability IFD Pointer
+            0x8769, // EXIF IFD Pointer
+        ].iter().cloned().collect();
+}
+
 pub struct TiffFile<'a> {
+    // TODO: add info about origin of every IFD?
     pub ifds: Vec<Ifd<'a>>,
     pub data: &'a [u8],
 }
@@ -279,6 +294,11 @@ impl<'a> TiffFile<'a> {
         let data = self.data_for_ifd_entry(ifd);
         ifd.field_type.debug_repr(data)
     }
+
+    pub fn all_fields(&self) -> Flatten<core::slice::Iter<Vec<IfdEntry>>> {
+        println!("num IFDs: {}", self.ifds.len());
+        self.ifds.iter().flatten()
+    }
 }
 
 pub type Ifd<'a> = Vec<IfdEntry<'a>>;
@@ -305,10 +325,14 @@ pub fn parse_ifd(input: I) -> IResult<I, (Ifd, Option<usize>)> {
 }
 
 pub fn parse_tiff(input: I) -> IResult<I, TiffFile> {
-    parse_tiff_flex_prefix(b"II*\0", input)
+    parse_tiff_with_options(input, b"II*\0", false)
 }
 
-pub fn parse_tiff_flex_prefix<'b>(prefix: &'_ [u8], input: I<'b>) -> IResult<I<'b>, TiffFile<'b>> {
+pub fn parse_tiff_with_options<'b>(
+    input: I<'b>,
+    prefix: &'_ [u8],
+    load_subifds: bool,
+) -> IResult<I<'b>, TiffFile<'b>> {
     let (_i, (_tag, first_ifd_offset)) = tuple((tag(prefix), le_u32))(input)?;
     let mut ifds = Vec::new();
     let mut ifd_offset = first_ifd_offset as usize;
@@ -324,7 +348,47 @@ pub fn parse_tiff_flex_prefix<'b>(prefix: &'_ [u8], input: I<'b>) -> IResult<I<'
         }
     }
 
+    println!("Cool, found so far: {}", ifds.len());
+
+    // Scan subifds here! TODO: rename param to load_nested / recursive etc
+    if load_subifds {
+        let mut subifds = vec![];
+        println!("Ok loading subifds too");
+        for ifd in &ifds {
+            subifds.append(&mut find_nested_ifds(&ifd, input))
+        }
+        println!("Num subifds about to add: {}", subifds.len());
+        ifds.append(&mut subifds);
+    }
+
+    println!("Yay done! num IFDs: {}", ifds.len());
+
     Ok((input, TiffFile { ifds, data: input }))
+}
+
+// Looks for nested IFDs recursively using a predefined selection of tags.
+fn find_nested_ifds<'a>(ifd: &Ifd<'_>, file_data: &'a [u8]) -> Vec<Ifd<'a>> {
+    //println!("Find Nested IFDs");
+    let mut subifds = vec![];
+
+    for entry in ifd.iter().filter(|e| NESTED_IFD_TAGS.contains(&e.tag)) {
+        println!("Got one: {:X}", entry.tag);
+        // Can't use val_as_offset because this is a Long value pointing to a location, not a proper offset.
+        if let Some(offset) = entry.val_u32() {
+            println!("Got offset: {}", offset);
+            if let Ok((_, (parsed, next_ifd))) = parse_ifd(&file_data[((offset as usize)..)]) {
+                // other cases have not been implemented!
+                assert!(next_ifd == None);
+
+                // Have to compute the recursed values before the push; the push is a move
+                let mut recursed = find_nested_ifds(&parsed, file_data);
+                subifds.push(parsed);
+                subifds.append(&mut recursed);
+                println!("Added: {:X}", entry.tag);
+            }
+        }
+    }
+    subifds
 }
 
 #[cfg(test)]
