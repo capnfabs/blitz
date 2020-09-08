@@ -2,7 +2,7 @@ use clap::{App, Arg};
 
 use libraw::{fuji_meta, tiff};
 
-use libraw::tiff::{parse_ifd, parse_tiff_with_options, FieldType, Ifd, IfdEntry, TiffFile};
+use libraw::tiff::{parse_tiff_with_options, FieldType, Ifd, IfdEntry, TiffFile};
 use memmap::Mmap;
 
 use itertools::Itertools;

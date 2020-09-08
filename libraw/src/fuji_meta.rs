@@ -44,9 +44,7 @@ fn get_field_val(hm: &HashMap<u16, &IfdEntry>, tag: u16) -> Result<u32, String> 
 }
 
 pub fn load_focus_info(raf_file: &RafFile) -> Result<FocusInfo, Box<dyn Error + '_>> {
-    println!("Loading focus info");
     let exif_bytes = raf_file.file_parts()?.jpeg_exif_tiff;
-    println!("Got exif");
     let (_, tiff) = tiff::parse_tiff_with_options(exif_bytes, b"II*\0", true)?;
     let makernotes = tiff
         .all_fields()
@@ -62,10 +60,9 @@ pub fn load_focus_info(raf_file: &RafFile) -> Result<FocusInfo, Box<dyn Error + 
         .all_fields()
         .map(|val| (val.tag, val))
         .collect();
-    println!("Got hashmap: {:?}", hm);
     let priority = get_field_val(&hm, 0x102b)?;
     let settings = get_field_val(&hm, 0x102d)?;
-    let afc = get_field_val(&hm, 0x102e)?;
+    let _afc = get_field_val(&hm, 0x102e)?;
     let afs_priority = FromPrimitive::from_u32(priority & 0x000F).ok_or(format!(
         "Focus Priority {} Mapped to Unknown Value",
         priority

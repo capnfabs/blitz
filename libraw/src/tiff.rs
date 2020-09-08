@@ -296,7 +296,6 @@ impl<'a> TiffFile<'a> {
     }
 
     pub fn all_fields(&self) -> Flatten<core::slice::Iter<Vec<IfdEntry>>> {
-        println!("num IFDs: {}", self.ifds.len());
         self.ifds.iter().flatten()
     }
 }
@@ -348,20 +347,14 @@ pub fn parse_tiff_with_options<'b>(
         }
     }
 
-    println!("Cool, found so far: {}", ifds.len());
-
     // Scan subifds here! TODO: rename param to load_nested / recursive etc
     if load_subifds {
         let mut subifds = vec![];
-        println!("Ok loading subifds too");
         for ifd in &ifds {
             subifds.append(&mut find_nested_ifds(&ifd, input))
         }
-        println!("Num subifds about to add: {}", subifds.len());
         ifds.append(&mut subifds);
     }
-
-    println!("Yay done! num IFDs: {}", ifds.len());
 
     Ok((input, TiffFile { ifds, data: input }))
 }
@@ -372,10 +365,8 @@ fn find_nested_ifds<'a>(ifd: &Ifd<'_>, file_data: &'a [u8]) -> Vec<Ifd<'a>> {
     let mut subifds = vec![];
 
     for entry in ifd.iter().filter(|e| NESTED_IFD_TAGS.contains(&e.tag)) {
-        println!("Got one: {:X}", entry.tag);
         // Can't use val_as_offset because this is a Long value pointing to a location, not a proper offset.
         if let Some(offset) = entry.val_u32() {
-            println!("Got offset: {}", offset);
             if let Ok((_, (parsed, next_ifd))) = parse_ifd(&file_data[((offset as usize)..)]) {
                 // other cases have not been implemented!
                 assert!(next_ifd == None);
@@ -384,7 +375,6 @@ fn find_nested_ifds<'a>(ifd: &Ifd<'_>, file_data: &'a [u8]) -> Vec<Ifd<'a>> {
                 let mut recursed = find_nested_ifds(&parsed, file_data);
                 subifds.push(parsed);
                 subifds.append(&mut recursed);
-                println!("Added: {:X}", entry.tag);
             }
         }
     }

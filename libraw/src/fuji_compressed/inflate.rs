@@ -241,9 +241,9 @@ fn compute_value_and_update_gradients<R: io::Read>(
     let delta = sample_to_delta(sample);
     // Finally: update gradient.
     let actual_value = if grad_instructs_subtraction {
-        (weighted_average as i32 - delta as i32)
+        weighted_average as i32 - delta as i32
     } else {
-        (weighted_average as i32 + delta as i32)
+        weighted_average as i32 + delta as i32
     };
 
     grad.update_from_value(delta.abs());

@@ -6,7 +6,7 @@ use image::{imageops, DynamicImage, ImageBuffer, ImageFormat};
 use itertools::Itertools;
 use libraw::raf::{ParsedRafFile, RafFile};
 extern crate nalgebra as na;
-use blitz::camera_specific_junk::{dng_cam1_to_xyz, dng_cam2_to_xyz};
+use blitz::camera_specific_junk::dng_cam2_to_xyz;
 use blitz::levels::{cam_to_srgb, make_black_sub_task};
 use blitz::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
 use blitzbin::diagnostics::TermImage;
