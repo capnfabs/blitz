@@ -13,10 +13,10 @@ pub type I<'a> = &'a [u8];
 
 pub struct TiffFile<'a> {
     pub ifds: Vec<Ifd<'a>>,
-    data: &'a [u8],
+    pub data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IfdEntry<'a> {
     pub tag: u16,
     pub field_type: FieldType,
@@ -264,6 +264,7 @@ impl<'a> TiffFile<'a> {
 
     // Returns a byte slice corresponding to the offset + length in the given IFD entry
     pub fn data_for_ifd_entry(&self, ifd_entry: &'a IfdEntry) -> &'a [u8] {
+        // the unwrap_or effectively treats Unknowns as 1
         let byte_size = ifd_entry.count as usize * ifd_entry.field_type.type_size().unwrap_or(1);
         if byte_size <= 4 {
             &ifd_entry.value_offset[0..byte_size]
@@ -275,7 +276,6 @@ impl<'a> TiffFile<'a> {
     }
 
     pub fn debug_value_for_ifd_entry(&self, ifd: &IfdEntry) -> String {
-        // the unwrap_or effectively treats Unknowns as 1
         let data = self.data_for_ifd_entry(ifd);
         ifd.field_type.debug_repr(data)
     }
@@ -309,12 +309,9 @@ pub fn parse_tiff(input: I) -> IResult<I, TiffFile> {
 }
 
 pub fn parse_tiff_flex_prefix<'b>(prefix: &'_ [u8], input: I<'b>) -> IResult<I<'b>, TiffFile<'b>> {
-    println!("trying with prefix {:X?}", prefix);
-    println!("input is {:X?}", &input[0..100]);
     let (_i, (_tag, first_ifd_offset)) = tuple((tag(prefix), le_u32))(input)?;
     let mut ifds = Vec::new();
     let mut ifd_offset = first_ifd_offset as usize;
-    println!("ok working, prefix {:?}", prefix);
     loop {
         // relative to base of TIFF file
         let ifd_input = &input[(ifd_offset as usize)..];

@@ -1,17 +1,17 @@
 #[derive(Debug, Clone, Copy)]
-pub enum TagPath {
-    PreviewExif,
-    PreviewExifMakerNotes,
-    Raw,
+pub enum TagContext {
+    Exif,
+    ExifMakerNotes,
+    FujiRaw,
 }
 
 const NOEXIST: &'static str = "SENTINEL_NOEXIST";
 
-pub fn label_for_tag(context: TagPath, tag_id: u16) -> Option<&'static str> {
+pub fn label_for_tag(context: TagContext, tag_id: u16) -> Option<&'static str> {
     let func = match context {
-        TagPath::PreviewExif => label_for_exif_field,
-        TagPath::PreviewExifMakerNotes => label_for_maker_notes,
-        TagPath::Raw => label_for_raw,
+        TagContext::Exif => label_for_exif_field,
+        TagContext::ExifMakerNotes => label_for_maker_notes,
+        TagContext::FujiRaw => label_for_raw,
     };
     let label = func(tag_id);
     if label != NOEXIST {
