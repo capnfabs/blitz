@@ -51,7 +51,73 @@ fn label_for_raw(id: u16) -> &'static str {
 }
 
 fn label_for_maker_notes(id: u16) -> &'static str {
-    "TODO"
+    match id {
+        0x0000 => "Version",
+        0x0010 => "Internal Serial Number",
+        0x1000 => "Quality",
+        0x1001 => "Sharpness",
+        0x1002 => "White Balance",
+        0x1003 => "Saturation",
+        0x100a => "White Balance Fine Tune",
+        0x100e => "Noise Reduction",
+        0x1010 => "Fuji Flash Mode",
+        0x1011 => "Flash Exposure Comp",
+        0x1021 => "Focus Mode",
+        0x1022 => "AF Mode",
+        0x1023 => "Focus Pixel",
+        // 0x1026 => "", ?
+        // Focus Priority Settings, packed into 4 bit fields
+        // Fujifilm.pm: 882
+        0x102B => "Focus / Shutter Priority Settings",
+        // 0x102C => "", // Unknown
+        // More Focus Settings, see FujiFilm.pm:907
+        0x102D => "Focus Settings",
+        // FujiFilm.pm:957
+        0x102E => "Continuous Autofocus Settings",
+        0x1030 => "Slow Sync",
+        0x1031 => "Picture Mode",
+        0x1032 => "Exposure Count",
+        0x1040 => "Shadow Tone",
+        0x1041 => "Highlight Tone",
+        0x1045 => "Lens Modulation Optimizer",
+        // 0x1046 => "",
+        0x1047 => "Grain Effect",
+        0x1050 => "Shutter Type",
+        0x1100 => "Auto Bracketing",
+        0x1101 => "Sequence Number",
+        0x1103 => "Drive Mode Settings",
+        // 0x1200 => "",
+        0x1300 => "Blur Warning",
+        0x1301 => "Focus Warning",
+        0x1302 => "Exposure Warning",
+        // 0x1303 => "",
+        // 0x1304 => "",
+        // 0x1305 => "",
+        0x1400 => "Dynamic Range",
+        0x1401 => "Film Mode",
+        0x1402 => "Dynamic Range Setting",
+        0x1404 => "Min Focal Length",
+        0x1405 => "Max Focal Length",
+        0x1406 => "Max Aperture At Min Focal",
+        0x1407 => "Max Aperture At Max Focal",
+        // 0x1408 => "",
+        // 0x1409 => "",
+        // 0x140A => "",
+        0x140b => "Auto Dynamic Range",
+        0x1422 => "Image Stabilization",
+        // 0x1424 => "",
+        // 0x1430 => "",
+        0x1431 => "Rating",
+        0x1436 => "Image Generation",
+        0x1438 => "Image Count",
+        // 0x1439 => "",
+        0x1446 => "Flicker Reduction",
+        0x4100 => "Faces Detected",
+        0x4200 => "Num Face Elements",
+        0x0008 => "Raw Image Width",
+        0x000c => "Raw Image Height",
+        _ => NOEXIST,
+    }
 }
 
 fn label_for_exif_field(id: u16) -> &'static str {
