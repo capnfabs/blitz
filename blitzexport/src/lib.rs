@@ -1,21 +1,38 @@
-use blitz::render::parse_and_render;
+use blitz::render::render_raw;
 use libc::c_char;
-use libraw::raf::RafFile;
+use libraw::raf::{ParsedRafFile, RafFile};
 use std::ffi::CStr;
 
-pub struct RawRenderer {
+pub struct RawRenderer<'a> {
     file: RafFile,
+    parsed: Option<ParsedRafFile<'a>>,
 }
 
-impl RawRenderer {
+impl<'a> RawRenderer<'a> {
     pub fn new(filename: &str) -> Self {
         let file = RafFile::open(filename).unwrap();
-        RawRenderer { file }
+        RawRenderer { file, parsed: None }
+    }
+
+    fn ensure_parsed(&'a mut self) -> &ParsedRafFile {
+        if self.parsed.is_none() {
+            println!(
+                "Parsing: {}...",
+                self.file
+                    .path()
+                    .file_name()
+                    .and_then(|x| x.to_str())
+                    .unwrap()
+            );
+            self.parsed = Some(self.file.parse_raw().unwrap());
+            println!("...done!");
+        }
+        self.parsed.as_ref().unwrap()
     }
 }
 
 #[no_mangle]
-pub extern "C" fn raw_renderer_new(filename: *const c_char) -> *mut RawRenderer {
+pub extern "C" fn raw_renderer_new(filename: *const c_char) -> *mut RawRenderer<'static> {
     let c_str = unsafe {
         assert!(!filename.is_null());
 
@@ -52,7 +69,7 @@ impl Buffer {
 
 #[repr(C)]
 pub struct RenderSettings {
-    tone_curve: [f32; 10],
+    tone_curve: [f32; 5],
 }
 
 #[no_mangle]
@@ -71,7 +88,7 @@ pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    return Buffer::from_byte_vec(parse_and_render(&renderer.file).into_vec());
+    return Buffer::from_byte_vec(render_raw(renderer.ensure_parsed()).into_vec());
 }
 
 #[no_mangle]
@@ -83,7 +100,7 @@ pub extern "C" fn raw_renderer_render_with_settings(
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    return Buffer::from_byte_vec(parse_and_render(&renderer.file).into_vec());
+    return Buffer::from_byte_vec(render_raw(renderer.ensure_parsed()).into_vec());
 }
 
 #[no_mangle]
