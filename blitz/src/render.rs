@@ -20,7 +20,6 @@ pub fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
 
 pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) -> image::RgbImage {
     println!("Settings: {:?}", settings);
-    let raf = img;
     let ri = &img.render_info();
 
     let mapping = Array2::from_shape_vec((6, 6).set_f(true), ri.xtrans_mapping.clone()).unwrap();
@@ -38,7 +37,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     let matrix = dng_cam2_to_xyz();
 
     // Define steps
-    let devignette = make_devignetter(raf);
+    //let devignette = make_devignetter(img);
     let black_sub = make_black_sub_task(ri.black_levels.clone());
     let convert_to_float = |_: usize, _: usize, val: u16| val as f32 / max;
     let apply_wb = move |pixel: &Pixel<f32>| Pixel {
@@ -47,15 +46,13 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         blue: pixel.blue * scale_factors[2],
     };
 
-    let apply_curve = |pixel: &Hsl<_>| {
+    let apply_curve_floats = |pixel: f32| {
         let coefs = settings.tone_curve.len();
-        let mut chosen = (pixel.lightness * coefs as f32) as usize;
+        let mut chosen = (pixel * coefs as f32) as usize;
         if chosen >= coefs {
             chosen = coefs - 1;
         }
-        let mut ret = pixel.clone();
-        ret.lightness = settings.tone_curve[chosen] * ret.lightness;
-        ret
+        settings.tone_curve[chosen] * pixel
     };
 
     let clamp = |pixel: &Pixel<_>| Pixel {
@@ -68,9 +65,10 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     // Run steps
     // This is the "operating on single values" phase.
     let img = par_index_map_siso(&src, |x, y, val| {
-        let val = devignette(x, y, val);
+        //let val = devignette(x, y, val);
         let val = black_sub(x, y, val);
         let val = convert_to_float(x, y, val);
+        let val = apply_curve_floats(val);
         val
     });
 
@@ -80,7 +78,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         let val = apply_wb(&val);
         let val = clamp(&val);
         let val = convert_to_hsl(&val);
-        let val = apply_curve(&val);
+        //let val = apply_curve(&val);
         let val = hsl_to_rgb(&val);
         val
     });

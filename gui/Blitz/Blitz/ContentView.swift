@@ -84,6 +84,8 @@ struct RenderControlsView: View {
     
     let onUpdateClicked: ((Float, Float, Float, Float, Float)) -> Void;
     
+    @State var exposure: Double = 0
+    
     @State var curve0: Double = 0
     @State var curve1: Double = 0
     @State var curve2: Double = 0
@@ -92,13 +94,17 @@ struct RenderControlsView: View {
     
     var body: some View {
         VStack {
-            Text("Slidey bois! \(curve0)")
             HStack {
-                SlideyBoi(value: $curve0)
-                SlideyBoi(value: $curve1)
-                SlideyBoi(value: $curve2)
-                SlideyBoi(value: $curve3)
-                SlideyBoi(value: $curve4)
+                Text("Baseline Exposure: \(self.exposure)")
+                SlideyBoi(value: $exposure, min:-5, max:5)
+            }
+            Text("Tone Curve")
+            HStack {
+                SlideyBoi(value: $curve0, vertical: true, min:-5, max:5)
+                SlideyBoi(value: $curve1, vertical: true, min:-5, max:5)
+                SlideyBoi(value: $curve2, vertical: true, min:-5, max:5)
+                SlideyBoi(value: $curve3, vertical: true, min:-5, max:5)
+                SlideyBoi(value: $curve4, vertical: true, min:-5, max:5)
             }
             Button(action: { self.onUpdateClicked((Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))) }){
                 Text("Render!")
@@ -123,13 +129,17 @@ class SlideyCoordinator: NSObject {
 struct SlideyBoi: NSViewRepresentable {
     @Binding var value: Double
     
+    var vertical: Bool = false
+    var min: Double = 0.0
+    var max: Double = 1.0
+    
     func makeCoordinator() -> SlideyCoordinator {
         return SlideyCoordinator(value: $value)
     }
     
     func makeNSView(context: Context) -> NSSlider {
-        let slider = NSSlider(value: self.value, minValue: -5, maxValue: 5, target: context.coordinator, action: #selector(SlideyCoordinator.valueChanged))
-        slider.isVertical = true
+        let slider = NSSlider(value: self.value, minValue: self.min, maxValue: self.max, target: context.coordinator, action: #selector(SlideyCoordinator.valueChanged))
+        slider.isVertical = self.vertical
         return slider
     }
 
