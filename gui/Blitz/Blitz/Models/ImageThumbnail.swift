@@ -45,6 +45,21 @@ class AsyncImage : ObservableObject {
             }
         }
     }
+    
+    func loadWithSettings(settings: RenderSettings) {
+        if !loading {
+            print("Loading, with settings...")
+            image = nil
+            loading = true
+            DispatchQueue.global().async {
+                let bytes = self.renderer.render(withSettings: settings)
+                DispatchQueue.main.async {
+                    self.image = bytes
+                    self.loading = false
+                }
+            }
+        }
+    }
 
     func cancel() {
         // Ignored

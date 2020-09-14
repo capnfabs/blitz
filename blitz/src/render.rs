@@ -1,24 +1,25 @@
 use image::ImageBuffer;
 use itertools::Itertools;
-use libraw::raf::{ParsedRafFile, RafFile};
+use libraw::raf::ParsedRafFile;
 extern crate nalgebra as na;
 use crate::camera_specific_junk::dng_cam2_to_xyz;
 use crate::common::Pixel;
 use crate::demosaic::{Demosaic, Nearest};
-use crate::levels::{cam_to_hsv, cam_to_srgb, hsv_to_rgb, make_black_sub_task};
+use crate::levels::{cam_to_hsl, hsl_to_rgb, make_black_sub_task};
 use crate::render_settings::RenderSettings;
 use crate::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
 use crate::vignette_correction;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
-use palette::Hsv;
+use palette::Hsl;
 
 pub fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     render_raw_with_settings(img, &Default::default())
 }
 
 pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) -> image::RgbImage {
+    println!("Settings: {:?}", settings);
     let raf = img;
     let ri = &img.render_info();
 
@@ -46,14 +47,14 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         blue: pixel.blue * scale_factors[2],
     };
 
-    let apply_curve = |pixel: &Hsv<_>| {
+    let apply_curve = |pixel: &Hsl<_>| {
         let coefs = settings.tone_curve.len();
-        let mut chosen = (pixel.value * coefs as f32) as usize;
+        let mut chosen = (pixel.lightness * coefs as f32) as usize;
         if chosen >= coefs {
             chosen = coefs - 1;
         }
         let mut ret = pixel.clone();
-        ret.value = settings.tone_curve[chosen] * ret.value;
+        ret.lightness = settings.tone_curve[chosen] * ret.lightness;
         ret
     };
 
@@ -62,8 +63,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         green: float_clamp(pixel.green),
         blue: float_clamp(pixel.blue),
     };
-    let convert_to_srgb = |pixel: &Pixel<_>| cam_to_srgb(&matrix, pixel);
-    let convert_to_hsv = |pixel: &Pixel<_>| cam_to_hsv(&matrix, pixel);
+    let convert_to_hsl = |pixel: &Pixel<_>| cam_to_hsl(&matrix, pixel);
 
     // Run steps
     // This is the "operating on single values" phase.
@@ -79,12 +79,9 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         let val = Nearest::demosaic(data, &mapping, x, y);
         let val = apply_wb(&val);
         let val = clamp(&val);
-        // using HSV instead of HSL here because, as per wiki:
-        // The difference is that a perfectly light color in HSL is pure white; but a perfectly bright color in HSV is analogous to shining a white light on a colored object. I.e. shining a bright white light on a red object causes the object to still appear red, just brighter and more intense. Shining a dim light on a red object causes the object to appear dark and less bright.
-        // I think this is a nice property for photo editing?
-        let val = convert_to_hsv(&val);
+        let val = convert_to_hsl(&val);
         let val = apply_curve(&val);
-        let val = hsv_to_rgb(&val);
+        let val = hsl_to_rgb(&val);
         val
     });
 

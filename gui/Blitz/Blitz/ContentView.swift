@@ -71,13 +71,19 @@ struct DetailView: View {
                     .padding(20)
                 }
             }
-            RenderControlsView()
+            RenderControlsView(onUpdateClicked: {
+                print("lol!!", $0);
+                self.image.loadWithSettings(settings: RenderSettings(tone_curve: $0))
+            })
         }
         .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
     }
 }
 
 struct RenderControlsView: View {
+    
+    let onUpdateClicked: ((Float, Float, Float, Float, Float)) -> Void;
+    
     @State var curve0: Double = 0
     @State var curve1: Double = 0
     @State var curve2: Double = 0
@@ -93,6 +99,9 @@ struct RenderControlsView: View {
                 SlideyBoi(value: $curve2)
                 SlideyBoi(value: $curve3)
                 SlideyBoi(value: $curve4)
+            }
+            Button(action: { self.onUpdateClicked((Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))) }){
+                Text("Render!")
             }
         }
     }

@@ -24,4 +24,4 @@ RawRenderer *raw_renderer_new(const char *filename);
 
 Buffer raw_renderer_render_image(RawRenderer *ptr);
 
-Buffer raw_renderer_render_with_settings(RawRenderer *ptr, const RenderSettings *settings);
+Buffer raw_renderer_render_with_settings(RawRenderer *ptr, RenderSettings settings);

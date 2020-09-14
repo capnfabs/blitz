@@ -38,6 +38,11 @@ class Renderer {
         return result.toData()
     }
     
+    func render(withSettings: RenderSettings) -> Data {
+        let result = raw_renderer_render_with_settings(self.renderer, withSettings);
+        return result.toData()
+    }
+    
     deinit {
         raw_renderer_free(self.renderer);
     }

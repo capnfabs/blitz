@@ -1,11 +1,12 @@
+#[derive(Debug, Clone)]
 pub struct RenderSettings {
-    pub tone_curve: [f32; 5],
+    pub tone_curve: Vec<f32>,
 }
 
 impl Default for RenderSettings {
     fn default() -> Self {
         RenderSettings {
-            tone_curve: [1.0, 1.0, 1.0, 1.0, 1.0],
+            tone_curve: vec![1.5],
         }
     }
 }

@@ -1,4 +1,5 @@
-use blitz::render::render_raw;
+use blitz::render::{render_raw, render_raw_with_settings};
+use blitz::render_settings;
 use libc::c_char;
 use libraw::raf::{ParsedRafFile, RafFile};
 use std::ffi::CStr;
@@ -72,6 +73,21 @@ pub struct RenderSettings {
     tone_curve: [f32; 5],
 }
 
+const TONE_CURVE_CONST: f32 = 2.0;
+
+impl RenderSettings {
+    fn to_blitz_settings(&self) -> render_settings::RenderSettings {
+        render_settings::RenderSettings {
+            tone_curve: self
+                .tone_curve
+                .iter()
+                .copied()
+                .map(|x| TONE_CURVE_CONST.powf(x))
+                .collect(),
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
     let renderer = unsafe {
@@ -94,13 +110,16 @@ pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
 #[no_mangle]
 pub extern "C" fn raw_renderer_render_with_settings(
     ptr: *mut RawRenderer,
-    settings: &RenderSettings,
+    settings: RenderSettings,
 ) -> Buffer {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    return Buffer::from_byte_vec(render_raw(renderer.ensure_parsed()).into_vec());
+    return Buffer::from_byte_vec(
+        render_raw_with_settings(renderer.ensure_parsed(), &settings.to_blitz_settings())
+            .into_vec(),
+    );
 }
 
 #[no_mangle]
