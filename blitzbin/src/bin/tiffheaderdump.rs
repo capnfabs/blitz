@@ -68,10 +68,8 @@ fn main_command(img_file: &str, tags: &[u16], print_all_data: bool) {
 fn dump_dng(img_file: &str, tags: &[u16], print_all_data: bool) {
     let file = File::open(img_file).unwrap();
     let mmap = unsafe { Mmap::map(&file) }.unwrap();
-    // TODO: choice of TagPath here is wrong; fix it once we support DNGs in the
-    //  labelling.
     let (_, container) = tiff::parse_tiff_with_options(&mmap, b"II*\0", true).unwrap();
-    process_tiff_container(TagContext::Exif, tags, print_all_data, &container);
+    process_tiff_container(TagContext::TiffDng, tags, print_all_data, &container);
 }
 
 fn dump_raf(img_file: &str, tags: &[u16], print_all_data: bool) {
