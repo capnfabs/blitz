@@ -63,29 +63,32 @@ struct DetailView: View {
     @ObservedObject var image: AsyncImage;
     // TODO: Something to make this size consistently regardless of whether there's already a view or not.
     var body: some View {
+        let img = displayImage()
+        let imgIsOld = image.image == nil
         return VStack {
             Group {
-                if image.image != nil {
+                if img != nil {
                     HStack {
-                        Image(nsImage: image.image!.toNSImage())
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                        Button(action: {
-                            let appDelegate = NSApplication.shared.delegate as! AppDelegate
-                            appDelegate.saveRender(label: self.filename, data: self.image.image!)
-                        }) {
-                            Text("Save")
+                        ZStack {
+                            Image(nsImage: img!.toNSImage())
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                            if imgIsOld {
+                                // TODO; this is side-effect-y
+                                Text("Rerendering...")
+                                .padding(20)
+                                    .foregroundColor(.white)
+                                    .background(Color.black)
+                            }
                         }
-                    }
-                } else if image.lastImage != nil {
-                    ZStack {
-                        Image(nsImage: image.lastImage!.toNSImage())
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                        Text("Rerendering...")
-                        .padding(20)
-                            .foregroundColor(.white)
-                            .background(Color.black)
+                        VStack {
+                            Button(action: {
+                                let appDelegate = NSApplication.shared.delegate as! AppDelegate
+                                appDelegate.saveRender(label: self.filename, data: self.image.image!)
+                            }) {
+                                Text("Save")
+                            }
+                        }.disabled(imgIsOld)
                     }
                 } else {
                     Text("Click render to start.")
@@ -98,6 +101,10 @@ struct DetailView: View {
             })
         }
         .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+    }
+    
+    func displayImage() -> Data? {
+        image.image ?? image.lastImage
     }
 }
 
