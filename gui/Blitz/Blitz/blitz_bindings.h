@@ -12,6 +12,7 @@ typedef struct {
 
 typedef struct {
   float tone_curve[5];
+  float exposure_basis;
 } RenderSettings;
 
 void free_buffer(Buffer buf);

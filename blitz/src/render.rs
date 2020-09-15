@@ -12,7 +12,6 @@ use crate::vignette_correction;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
-use palette::Hsl;
 
 pub fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     render_raw_with_settings(img, &Default::default())
@@ -68,6 +67,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         //let val = devignette(x, y, val);
         let val = black_sub(x, y, val);
         let val = convert_to_float(x, y, val);
+        let val = val * (settings.exposure_basis);
         let val = apply_curve_floats(val);
         val
     });

@@ -12,6 +12,7 @@ import QGrid
 struct ContentView: View {
 
     @State private var currentImage: AsyncImage?
+    @State private var currentImageUrl: URL?
     @EnvironmentObject var workspace: Workspace;
     
     var body: some View {
@@ -24,10 +25,10 @@ struct ContentView: View {
                     LibraryView(onSelect: {thumb in
                         print("Selected: \(thumb.path)")
                         self.currentImage = AsyncImage(thumb.renderer)
-                        self.currentImage!.load()
+                        self.currentImageUrl = thumb.path
                     }, minimalMode: detailExpanded())
                     if (detailExpanded()) {
-                        DetailView(image: currentImage!)
+                        DetailView(filename: self.currentImageUrl!.lastPathComponent, image: currentImage!)
                     }
                 }
             }
@@ -35,7 +36,7 @@ struct ContentView: View {
     }
 
     func detailExpanded() -> Bool {
-        return currentImage != nil
+        return currentImage != nil && currentImageUrl != nil
     }
 }
 
@@ -57,23 +58,43 @@ struct LibraryView: View {
 }
 
 struct DetailView: View {
+    let filename: String
+    
     @ObservedObject var image: AsyncImage;
     // TODO: Something to make this size consistently regardless of whether there's already a view or not.
     var body: some View {
         return VStack {
             Group {
                 if image.image != nil {
-                    Image(nsImage: image.image!.toNSImage())
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
+                    HStack {
+                        Image(nsImage: image.image!.toNSImage())
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                        Button(action: {
+                            let appDelegate = NSApplication.shared.delegate as! AppDelegate
+                            appDelegate.saveRender(label: self.filename, data: self.image.image!)
+                        }) {
+                            Text("Save")
+                        }
+                    }
+                } else if image.lastImage != nil {
+                    ZStack {
+                        Image(nsImage: image.lastImage!.toNSImage())
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                        Text("Rerendering...")
+                        .padding(20)
+                            .foregroundColor(.white)
+                            .background(Color.black)
+                    }
                 } else {
-                    Text("Loading; stand by...")
+                    Text("Click render to start.")
                     .padding(20)
                 }
             }
             RenderControlsView(onUpdateClicked: {
                 print("lol!!", $0);
-                self.image.loadWithSettings(settings: RenderSettings(tone_curve: $0))
+                self.image.loadWithSettings(settings: $0)
             })
         }
         .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
@@ -82,7 +103,7 @@ struct DetailView: View {
 
 struct RenderControlsView: View {
     
-    let onUpdateClicked: ((Float, Float, Float, Float, Float)) -> Void;
+    let onUpdateClicked: (RenderSettings) -> Void;
     
     @State var exposure: Double = 0
     
@@ -94,20 +115,36 @@ struct RenderControlsView: View {
     
     var body: some View {
         VStack {
+            Button(action: {
+                let tone_curve = (Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))
+                let rs = RenderSettings(tone_curve: tone_curve, exposure_basis: Float(self.exposure))
+                self.onUpdateClicked(rs)
+                
+            }){
+                Text("Render!")
+            }
             HStack {
                 Text("Baseline Exposure: \(self.exposure)")
-                SlideyBoi(value: $exposure, min:-5, max:5)
+                SlideyBoi(value: $exposure, min:-1, max:1)
             }
-            Text("Tone Curve")
+            HStack {
+                Text("Tone Curve")
+                Button(action: {
+                    self.curve0 = 0
+                    self.curve1 = 0
+                    self.curve2 = 0
+                    self.curve3 = 0
+                    self.curve4 = 0
+                }) {
+                    Text("Reset")
+                }
+            }
             HStack {
                 SlideyBoi(value: $curve0, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve1, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve2, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve3, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve4, vertical: true, min:-5, max:5)
-            }
-            Button(action: { self.onUpdateClicked((Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))) }){
-                Text("Render!")
             }
         }
     }

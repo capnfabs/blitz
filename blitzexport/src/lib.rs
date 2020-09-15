@@ -71,6 +71,7 @@ impl Buffer {
 #[repr(C)]
 pub struct RenderSettings {
     tone_curve: [f32; 5],
+    exposure_basis: f32,
 }
 
 const TONE_CURVE_CONST: f32 = 2.0;
@@ -84,6 +85,7 @@ impl RenderSettings {
                 .copied()
                 .map(|x| TONE_CURVE_CONST.powf(x))
                 .collect(),
+            exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
         }
     }
 }

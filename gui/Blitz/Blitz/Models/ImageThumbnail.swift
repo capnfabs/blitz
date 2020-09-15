@@ -10,10 +10,10 @@ import Foundation
 import AppKit
 
 struct ImageThumbnail: Identifiable {
-    var id = UUID()
-    var path: URL
-    var previewBytes: Data
-    var renderer: Renderer
+    let id = UUID()
+    let path: URL
+    let previewBytes: Data
+    let renderer: Renderer
     
     init(path: URL) {
         self.path = path;
@@ -24,6 +24,7 @@ struct ImageThumbnail: Identifiable {
 
 class AsyncImage : ObservableObject {
     @Published var image: Data?
+    @Published var lastImage: Data?
     var renderer: Renderer
     private var loading = false
     
@@ -31,24 +32,10 @@ class AsyncImage : ObservableObject {
         self.renderer = renderer
     }
     
-    
-    func load() {
-        print("Loading...")
-        if image == nil && !loading {
-            loading = true
-            DispatchQueue.global().async {
-                let bytes = self.renderer.render()
-                DispatchQueue.main.async {
-                    self.image = bytes
-                    self.loading = false
-                }
-            }
-        }
-    }
-    
     func loadWithSettings(settings: RenderSettings) {
         if !loading {
             print("Loading, with settings...")
+            lastImage = image
             image = nil
             loading = true
             DispatchQueue.global().async {

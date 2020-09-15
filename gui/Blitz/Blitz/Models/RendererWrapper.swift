@@ -63,3 +63,16 @@ extension Data {
         return img
     }
 }
+
+extension NSImage {
+    func saveJpegToUrl(url: URL) {
+        let data = self.tiffRepresentation
+        let rep = NSBitmapImageRep(data: data!)
+        let imgData = rep!.representation(using: .jpeg, properties: [.compressionFactor: 0.95])
+        do {
+            try imgData!.write(to: url)
+        } catch {
+            print("TODO")
+        }
+    }
+}
