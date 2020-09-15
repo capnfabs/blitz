@@ -144,7 +144,7 @@ struct RenderControlsView: View {
                     self.curve4 = 0
                 }) {
                     Text("Reset")
-                }
+                }.buttonStyle(InlineButtonStyle())
             }
             HStack {
                 SlideyBoi(value: $curve0, vertical: true, min:-5, max:5)
@@ -223,10 +223,19 @@ struct ImageTile_Previews: PreviewProvider {
     }
 }
 
-
-
-struct ContentView_Previews: PreviewProvider {
+struct RenderControlsView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView().environmentObject(Workspace());
+        return RenderControlsView(onUpdateClicked: {_ in })
+    }
+}
+
+struct InlineButtonStyle: ButtonStyle {
+ 
+    func makeBody(configuration: Self.Configuration) -> some View {
+        configuration.label
+        .padding(5)
+            .foregroundColor(.white)
+            .background(configuration.isPressed ? Color.accentColor : Color.gray)
+        .cornerRadius(5)
     }
 }
