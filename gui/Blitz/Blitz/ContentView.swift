@@ -132,7 +132,7 @@ struct RenderControlsView: View {
             }
             HStack {
                 Text("Baseline Exposure: \(self.exposure)")
-                SlideyBoi(value: $exposure, min:-1, max:1)
+                SlideyBoi(value: $exposure, min:-5, max:5)
             }
             HStack {
                 Text("Tone Curve")

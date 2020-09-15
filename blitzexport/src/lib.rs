@@ -1,5 +1,6 @@
 use blitz::render::{render_raw, render_raw_with_settings};
 use blitz::render_settings;
+use blitz::render_settings::ToneCurve;
 use libc::c_char;
 use libraw::raf::{ParsedRafFile, RafFile};
 use std::ffi::CStr;
@@ -78,13 +79,20 @@ const TONE_CURVE_CONST: f32 = 2.0;
 
 impl RenderSettings {
     fn to_blitz_settings(&self) -> render_settings::RenderSettings {
+        let coefs: Vec<_> = self
+            .tone_curve
+            .iter()
+            .copied()
+            .map(|x| TONE_CURVE_CONST.powf(x))
+            .collect();
+        let tc = ToneCurve::new(&coefs);
+        println!("Tonecurve: {:?}", tc);
+        for i in 0..100 {
+            println!("{},{}", i, tc.apply(i as f32 / 100.));
+        }
+
         render_settings::RenderSettings {
-            tone_curve: self
-                .tone_curve
-                .iter()
-                .copied()
-                .map(|x| TONE_CURVE_CONST.powf(x))
-                .collect(),
+            tone_curve: tc,
             exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
         }
     }

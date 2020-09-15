@@ -45,14 +45,8 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         blue: pixel.blue * scale_factors[2],
     };
 
-    let apply_curve_floats = |pixel: f32| {
-        let coefs = settings.tone_curve.len();
-        let mut chosen = (pixel * coefs as f32) as usize;
-        if chosen >= coefs {
-            chosen = coefs - 1;
-        }
-        settings.tone_curve[chosen] * pixel
-    };
+    let apply_curve_floats =
+        |pixel: f32| settings.tone_curve.spline.clamped_sample(pixel).unwrap() * pixel;
 
     let clamp = |pixel: &Pixel<_>| Pixel {
         red: float_clamp(pixel.red),
