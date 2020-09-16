@@ -8,6 +8,7 @@ edition = "2018"
 blitz = {path = "../blitz" }
 libraw = {path = "../libraw" }
 libc = "0.2"
+image = "0.23.9"
 
 [build-dependencies]
 cbindgen = "0.14.2"

@@ -23,6 +23,29 @@ extension Buffer {
     }
 }
 
+extension RawImage {
+    func toNSImage() -> NSImage {
+        let data = self.data.toData()
+        // TODO: this will all break if we introduce another format; but I don't know swift well enough to mess around with preventing this yet.
+        let samplesPerPixel = self.pixel_format == Rgb ? 3 : 4
+        let hasAlpha = self.pixel_format == Rgba
+        let bitsPerSample = 8
+        let bitsPerPixel = bitsPerSample * samplesPerPixel
+        
+        let rep = data.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
+            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
+            let wut = [imgptr]
+            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
+                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
+                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: Int(self.width), pixelsHigh: Int(self.height), bitsPerSample: bitsPerSample, samplesPerPixel: samplesPerPixel, hasAlpha: hasAlpha, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: Int(self.width)*samplesPerPixel, bitsPerPixel: bitsPerPixel)!
+            }
+        }
+        let img = NSImage()
+        img.addRepresentation(rep)
+        return img
+    }
+}
+
 class Renderer {
     var renderer: OpaquePointer
     
@@ -36,50 +59,18 @@ class Renderer {
         
     }
     
-    func render() -> Data {
+    func render() -> NSImage {
         let result = raw_renderer_render_image(self.renderer);
-        return result.toData()
+        return result.toNSImage()
     }
     
-    func render(withSettings: RenderSettings) -> (Data, Data) {
+    func render(withSettings: RenderSettings) -> (NSImage, NSImage) {
         let result = raw_renderer_render_with_settings(self.renderer, withSettings);
-        return (result.img.toData(), result.histogram.toData())
+        return (result.img.toNSImage(), result.histogram.toNSImage())
     }
     
     deinit {
         raw_renderer_free(self.renderer);
-    }
-}
-
-extension Data {
-    func toNSImage() -> NSImage {
-        let rep = self.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
-            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
-            let wut = [imgptr]
-            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
-                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
-                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: 6000, pixelsHigh: 4000, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 6000*3, bitsPerPixel: 24)!
-            }
-        }
-        let img = NSImage()
-        img.addRepresentation(rep)
-        return img
-    }
-    
-    func toSmallNSImage() -> NSImage {
-                let rep = self.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
-            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
-            let wut = [imgptr]
-            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
-                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
-                let width = 256
-                let height = 128
-                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: width*4, bitsPerPixel: 32)!
-            }
-        }
-        let img = NSImage()
-        img.addRepresentation(rep)
-        return img
     }
 }
 

@@ -1,9 +1,8 @@
 use hdrhistogram;
-use image::{GenericImage, Pixel, Primitive, Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_rect_mut, Blend, Canvas};
+use image::{GenericImage, Pixel, Rgba, RgbaImage};
+use imageproc::drawing::{draw_filled_rect_mut, Canvas};
 use imageproc::rect::Rect;
 use itertools::Itertools;
-use std::ops::Add;
 
 pub struct Histogram {
     channel_histograms: Vec<hdrhistogram::Histogram<u32>>,
@@ -52,24 +51,24 @@ impl Histogram {
     pub fn to_img(&self, width: u32, height: u32) -> RgbaImage {
         // TODO: this doesn't really work well for any value _other_ than 256.
         assert!(width >= 256);
-        let mut img = RgbaImage::new(width, height);
+        let img = RgbaImage::new(width, height);
         let mut canvas = BlendAdd(img);
         let largest = self.channel_histograms[0]
             .iter_linear(2)
             .map(|x| x.count_since_last_iteration())
             .max()
             .unwrap();
-        let mut start_x = 0;
         for (hist, color) in self
             .channel_histograms
             .iter()
             .zip_eq(COLORS.iter().copied())
         {
+            let mut start_x = 0;
             for it in hist.iter_linear(2) {
                 let end_x = it.value_iterated_to();
                 let bar_height = it.count_since_last_iteration() * height as u64 / largest;
                 let bar_width = (end_x - start_x) * 256 / width as u64;
-                println!("xpos: {}, bar_height: {}", start_x, bar_height);
+                //println!("xpos: {}, bar_height: {}", start_x, bar_height);
                 if bar_height != 0 {
                     draw_filled_rect_mut(
                         &mut canvas,

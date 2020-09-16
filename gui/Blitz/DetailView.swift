@@ -22,7 +22,7 @@ struct DetailView: View {
                 if img != nil {
                     HStack {
                         ZStack {
-                            Image(nsImage: img!.toNSImage())
+                            Image(nsImage: img!)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                             if imgIsOld {
@@ -48,7 +48,7 @@ struct DetailView: View {
                 }
             }
             if self.image.histogram != nil {
-                Image(nsImage: self.image.histogram!.toSmallNSImage())
+                Image(nsImage: self.image.histogram!)
             }
             RenderControlsView(onUpdateClicked: {
                 self.image.loadWithSettings(settings: $0)
@@ -57,7 +57,7 @@ struct DetailView: View {
         .frame(minWidth: 400, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
     }
     
-    func displayImage() -> Data? {
+    func displayImage() -> NSImage? {
         image.image ?? image.lastImage
     }
 }

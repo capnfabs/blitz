@@ -17,10 +17,11 @@ impl RenderSettings {
             .map(|x| TONE_CURVE_CONST.powf(x))
             .collect();
         let tc = brs::ToneCurve::new(&coefs);
+        /*
         println!("Tonecurve: {:?}", tc);
         for i in 0..100 {
             println!("{},{}", i, tc.apply(i as f32 / 100.));
-        }
+        }*/
 
         brs::RenderSettings {
             tone_curve: tc,

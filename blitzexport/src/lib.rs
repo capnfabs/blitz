@@ -1,7 +1,7 @@
 mod render_settings;
 mod structs;
 
-use crate::structs::ImageAndHistogram;
+use crate::structs::{ImageAndHistogram, RawImage};
 use blitz::diagnostics::histogram::ToHistogram;
 use blitz::render::{render_raw, render_raw_with_settings};
 use libc::c_char;
@@ -40,12 +40,13 @@ pub extern "C" fn raw_renderer_get_preview(ptr: *mut RawRenderer) -> Buffer {
 }
 
 #[no_mangle]
-pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
+pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> RawImage {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    return Buffer::from_byte_vec(render_raw(renderer.ensure_parsed()).into_vec());
+    let img = render_raw(renderer.ensure_parsed());
+    RawImage::from_rgb_image(img)
 }
 
 #[no_mangle]
@@ -63,8 +64,8 @@ pub extern "C" fn raw_renderer_render_with_settings(
     let histo = img.histogram();
 
     ImageAndHistogram {
-        img: Buffer::from_byte_vec(img.into_vec()),
-        histogram: Buffer::from_byte_vec(histo.to_img(256, 128).into_vec()),
+        img: RawImage::from_rgb_image(img),
+        histogram: RawImage::from_rgba_image(histo.to_img(256, 128)),
     }
 }
 

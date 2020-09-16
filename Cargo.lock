@@ -164,6 +164,7 @@ version = "0.1.0"
 dependencies = [
  "blitz 0.1.0",
  "cbindgen 0.14.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "image 0.23.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "libraw 0.1.0",
 ]

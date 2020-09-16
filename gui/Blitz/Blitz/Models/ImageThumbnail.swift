@@ -23,9 +23,9 @@ struct ImageThumbnail: Identifiable {
 }
 
 class AsyncImage : ObservableObject {
-    @Published var image: Data?
-    @Published var lastImage: Data?
-    @Published var histogram: Data?
+    @Published var image: NSImage?
+    @Published var lastImage: NSImage?
+    @Published var histogram: NSImage?
     
     var renderer: Renderer
     private var loading = false
@@ -41,10 +41,10 @@ class AsyncImage : ObservableObject {
             image = nil
             loading = true
             DispatchQueue.global().async {
-                let (bytes, histo_bytes) = self.renderer.render(withSettings: settings)
+                let (image, histo) = self.renderer.render(withSettings: settings)
                 DispatchQueue.main.async {
-                    self.image = bytes
-                    self.histogram = histo_bytes
+                    self.image = image
+                    self.histogram = histo
                     self.loading = false
                 }
             }

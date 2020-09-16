@@ -8,8 +8,46 @@ pub struct Buffer {
 
 #[repr(C)]
 pub struct ImageAndHistogram {
-    pub img: Buffer,
-    pub histogram: Buffer,
+    pub img: RawImage,
+    pub histogram: RawImage,
+}
+
+#[repr(C)]
+pub enum ImageFormat {
+    Rgb,
+    Rgba,
+}
+
+#[repr(C)]
+pub struct RawImage {
+    pub data: Buffer,
+    pub width: u32,
+    pub height: u32,
+    pub pixel_format: ImageFormat,
+}
+
+impl RawImage {
+    pub fn from_rgb_image(img: image::RgbImage) -> Self {
+        let width = img.width();
+        let height = img.height();
+        RawImage {
+            data: Buffer::from_byte_vec(img.into_vec()),
+            width: width,
+            height: height,
+            pixel_format: ImageFormat::Rgb,
+        }
+    }
+
+    pub fn from_rgba_image(img: image::RgbaImage) -> Self {
+        let width = img.width();
+        let height = img.height();
+        RawImage {
+            data: Buffer::from_byte_vec(img.into_vec()),
+            width: width,
+            height: height,
+            pixel_format: ImageFormat::Rgba,
+        }
+    }
 }
 
 impl Buffer {

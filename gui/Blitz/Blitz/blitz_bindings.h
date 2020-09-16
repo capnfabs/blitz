@@ -3,6 +3,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef enum {
+  Rgb,
+  Rgba,
+} ImageFormat;
+
 typedef struct RawRenderer RawRenderer;
 
 typedef struct {
@@ -11,8 +16,15 @@ typedef struct {
 } Buffer;
 
 typedef struct {
-  Buffer img;
-  Buffer histogram;
+  Buffer data;
+  uint32_t width;
+  uint32_t height;
+  ImageFormat pixel_format;
+} RawImage;
+
+typedef struct {
+  RawImage img;
+  RawImage histogram;
 } ImageAndHistogram;
 
 typedef struct {
@@ -28,6 +40,6 @@ Buffer raw_renderer_get_preview(RawRenderer *ptr);
 
 RawRenderer *raw_renderer_new(const char *filename);
 
-Buffer raw_renderer_render_image(RawRenderer *ptr);
+RawImage raw_renderer_render_image(RawRenderer *ptr);
 
 ImageAndHistogram raw_renderer_render_with_settings(RawRenderer *ptr, RenderSettings settings);

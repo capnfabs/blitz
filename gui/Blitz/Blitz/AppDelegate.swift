@@ -63,7 +63,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.workspace.setOutputDirectory(path: file);
     }
     
-    func saveRender(label: String, data: Data) {
+    func saveRender(label: String, data: NSImage) {
         print("Saving render", label)
         if self.workspace.outputDirectory == nil {
             chooseOutputDirectory(self)
@@ -80,7 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let date = df.string(from: Date())
         
         let outputUrl = self.workspace.outputDirectory!.appendingPathComponent("blitzgui-\(date).jpg")
-        data.toNSImage().saveJpegToUrl(url: outputUrl)
+        data.saveJpegToUrl(url: outputUrl)
     }
 }
 
