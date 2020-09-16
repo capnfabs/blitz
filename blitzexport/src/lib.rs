@@ -64,7 +64,7 @@ pub extern "C" fn raw_renderer_render_with_settings(
 
     ImageAndHistogram {
         img: Buffer::from_byte_vec(img.into_vec()),
-        histogram: Buffer::from_byte_vec(histo.to_img(0, 0).into_vec()),
+        histogram: Buffer::from_byte_vec(histo.to_img(256, 128).into_vec()),
     }
 }
 

@@ -72,7 +72,9 @@ extension Data {
             let wut = [imgptr]
             return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
                 let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
-                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: 256, pixelsHigh: 128, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 256*4, bitsPerPixel: 32)!
+                let width = 256
+                let height = 128
+                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: width*4, bitsPerPixel: 32)!
             }
         }
         let img = NSImage()
