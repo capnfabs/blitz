@@ -12,6 +12,9 @@ import AppKit
 
 extension Buffer {
     func toData() -> Data {
+        if self.data == nil {
+            return Data()
+        }
         print("Referencing  \(self.len) bytes at \(self.data!)")
         return Data(bytesNoCopy: self.data, count: Int(self.len), deallocator: .custom({(ptr, len) in
             print("Dropping \(len) bytes at \(ptr)")
@@ -38,9 +41,9 @@ class Renderer {
         return result.toData()
     }
     
-    func render(withSettings: RenderSettings) -> Data {
+    func render(withSettings: RenderSettings) -> (Data, Data) {
         let result = raw_renderer_render_with_settings(self.renderer, withSettings);
-        return result.toData()
+        return (result.img.toData(), result.histogram.toData())
     }
     
     deinit {

@@ -11,6 +11,11 @@ typedef struct {
 } Buffer;
 
 typedef struct {
+  Buffer img;
+  Buffer histogram;
+} ImageAndHistogram;
+
+typedef struct {
   float tone_curve[5];
   float exposure_basis;
 } RenderSettings;
@@ -25,4 +30,4 @@ RawRenderer *raw_renderer_new(const char *filename);
 
 Buffer raw_renderer_render_image(RawRenderer *ptr);
 
-Buffer raw_renderer_render_with_settings(RawRenderer *ptr, RenderSettings settings);
+ImageAndHistogram raw_renderer_render_with_settings(RawRenderer *ptr, RenderSettings settings);

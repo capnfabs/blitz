@@ -1,37 +1,13 @@
+mod render_settings;
+mod structs;
+
+use crate::structs::ImageAndHistogram;
+use blitz::diagnostics::histogram::ToHistogram;
 use blitz::render::{render_raw, render_raw_with_settings};
-use blitz::render_settings;
-use blitz::render_settings::ToneCurve;
 use libc::c_char;
-use libraw::raf::{ParsedRafFile, RafFile};
+use render_settings::RenderSettings;
 use std::ffi::CStr;
-
-pub struct RawRenderer<'a> {
-    file: RafFile,
-    parsed: Option<ParsedRafFile<'a>>,
-}
-
-impl<'a> RawRenderer<'a> {
-    pub fn new(filename: &str) -> Self {
-        let file = RafFile::open(filename).unwrap();
-        RawRenderer { file, parsed: None }
-    }
-
-    fn ensure_parsed(&'a mut self) -> &ParsedRafFile {
-        if self.parsed.is_none() {
-            println!(
-                "Parsing: {}...",
-                self.file
-                    .path()
-                    .file_name()
-                    .and_then(|x| x.to_str())
-                    .unwrap()
-            );
-            self.parsed = Some(self.file.parse_raw().unwrap());
-            println!("...done!");
-        }
-        self.parsed.as_ref().unwrap()
-    }
-}
+use structs::{Buffer, RawRenderer};
 
 #[no_mangle]
 pub extern "C" fn raw_renderer_new(filename: *const c_char) -> *mut RawRenderer<'static> {
@@ -50,51 +26,6 @@ pub extern "C" fn raw_renderer_free(ptr: *mut RawRenderer) {
     }
     unsafe {
         Box::from_raw(ptr);
-    }
-}
-
-#[repr(C)]
-pub struct Buffer {
-    data: *mut u8,
-    len: usize,
-}
-
-impl Buffer {
-    fn from_byte_vec(byte_vec: Vec<u8>) -> Buffer {
-        let mut buf = byte_vec.into_boxed_slice();
-        let data = buf.as_mut_ptr();
-        let len = buf.len();
-        std::mem::forget(buf);
-        Buffer { data, len }
-    }
-}
-
-#[repr(C)]
-pub struct RenderSettings {
-    tone_curve: [f32; 5],
-    exposure_basis: f32,
-}
-
-const TONE_CURVE_CONST: f32 = 2.0;
-
-impl RenderSettings {
-    fn to_blitz_settings(&self) -> render_settings::RenderSettings {
-        let coefs: Vec<_> = self
-            .tone_curve
-            .iter()
-            .copied()
-            .map(|x| TONE_CURVE_CONST.powf(x))
-            .collect();
-        let tc = ToneCurve::new(&coefs);
-        println!("Tonecurve: {:?}", tc);
-        for i in 0..100 {
-            println!("{},{}", i, tc.apply(i as f32 / 100.));
-        }
-
-        render_settings::RenderSettings {
-            tone_curve: tc,
-            exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
-        }
     }
 }
 
@@ -121,22 +52,24 @@ pub extern "C" fn raw_renderer_render_image(ptr: *mut RawRenderer) -> Buffer {
 pub extern "C" fn raw_renderer_render_with_settings(
     ptr: *mut RawRenderer,
     settings: RenderSettings,
-) -> Buffer {
+) -> ImageAndHistogram {
     let renderer = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    return Buffer::from_byte_vec(
-        render_raw_with_settings(renderer.ensure_parsed(), &settings.to_blitz_settings())
-            .into_vec(),
-    );
+
+    let img = render_raw_with_settings(renderer.ensure_parsed(), &settings.to_blitz_settings());
+    println!("Computing histograms");
+    let _histo = img.histogram();
+
+    ImageAndHistogram {
+        img: Buffer::from_byte_vec(img.into_vec()),
+        histogram: Buffer::from_byte_vec(vec![]),
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn free_buffer(buf: Buffer) {
-    let s = unsafe { std::slice::from_raw_parts_mut(buf.data, buf.len) };
-    let s = s.as_mut_ptr();
-    unsafe {
-        Box::from_raw(s);
-    }
+    // do this explicitly so the containing method doesn't get erased.
+    drop(buf)
 }

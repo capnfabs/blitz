@@ -20,6 +20,7 @@
 		1F4C52D5246EDB9D0085A2D0 /* BlitzUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52D4246EDB9D0085A2D0 /* BlitzUITests.swift */; };
 		1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */; };
 		1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */; };
+		1F86B4BB25121E94007BC218 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F86B4BA25121E94007BC218 /* DetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +62,7 @@
 		1F4C52E3246EDBF30085A2D0 /* blitz_bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = blitz_bindings.h; sourceTree = "<group>"; };
 		1F4C52E4246EDBF30085A2D0 /* blitz_bindings.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = blitz_bindings.c; sourceTree = "<group>"; };
 		1F4C52E7246EE94D0085A2D0 /* RendererWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RendererWrapper.swift; path = Models/RendererWrapper.swift; sourceTree = "<group>"; };
+		1F86B4BA25121E94007BC218 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +95,7 @@
 		1F4C52A7246EDB9B0085A2D0 = {
 			isa = PBXGroup;
 			children = (
+				1F86B4BA25121E94007BC218 /* DetailView.swift */,
 				1F4C52B2246EDB9B0085A2D0 /* Blitz */,
 				1F4C52C8246EDB9D0085A2D0 /* BlitzTests */,
 				1F4C52D3246EDB9D0085A2D0 /* BlitzUITests */,
@@ -314,6 +317,7 @@
 				1F328F64246FEEBB0038C890 /* ImageThumbnail.swift in Sources */,
 				1F4C52E8246EE94D0085A2D0 /* RendererWrapper.swift in Sources */,
 				1F4C52B6246EDB9B0085A2D0 /* ContentView.swift in Sources */,
+				1F86B4BB25121E94007BC218 /* DetailView.swift in Sources */,
 				1F4C52B4246EDB9B0085A2D0 /* AppDelegate.swift in Sources */,
 				1F211CCD2472AD050091163E /* RenderCache.swift in Sources */,
 				1F4C52E5246EDBF30085A2D0 /* blitz_bindings.c in Sources */,

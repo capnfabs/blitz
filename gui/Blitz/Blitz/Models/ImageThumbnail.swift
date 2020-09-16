@@ -39,7 +39,7 @@ class AsyncImage : ObservableObject {
             image = nil
             loading = true
             DispatchQueue.global().async {
-                let bytes = self.renderer.render(withSettings: settings)
+                let (bytes, _) = self.renderer.render(withSettings: settings)
                 DispatchQueue.main.async {
                     self.image = bytes
                     self.loading = false
