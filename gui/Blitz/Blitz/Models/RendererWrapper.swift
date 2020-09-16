@@ -65,6 +65,20 @@ extension Data {
         img.addRepresentation(rep)
         return img
     }
+    
+    func toSmallNSImage() -> NSImage {
+                let rep = self.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
+            let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
+            let wut = [imgptr]
+            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
+                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
+                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: 256, pixelsHigh: 128, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 256*4, bitsPerPixel: 32)!
+            }
+        }
+        let img = NSImage()
+        img.addRepresentation(rep)
+        return img
+    }
 }
 
 extension NSImage {

@@ -47,8 +47,10 @@ struct DetailView: View {
                     .padding(20)
                 }
             }
+            if self.image.histogram != nil {
+                Image(nsImage: self.image.histogram!.toSmallNSImage())
+            }
             RenderControlsView(onUpdateClicked: {
-                print("lol!!", $0);
                 self.image.loadWithSettings(settings: $0)
             })
         }

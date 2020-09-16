@@ -60,11 +60,11 @@ pub extern "C" fn raw_renderer_render_with_settings(
 
     let img = render_raw_with_settings(renderer.ensure_parsed(), &settings.to_blitz_settings());
     println!("Computing histograms");
-    let _histo = img.histogram();
+    let histo = img.histogram();
 
     ImageAndHistogram {
         img: Buffer::from_byte_vec(img.into_vec()),
-        histogram: Buffer::from_byte_vec(vec![]),
+        histogram: Buffer::from_byte_vec(histo.to_img(0, 0).into_vec()),
     }
 }
 

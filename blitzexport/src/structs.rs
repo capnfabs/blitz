@@ -30,6 +30,7 @@ impl Buffer {
             let data = buf.as_mut_ptr();
             let len = buf.len();
             std::mem::forget(buf);
+            println!("Supplying {} bytes at {:p}", len, data);
             Buffer { data, len }
         }
     }
