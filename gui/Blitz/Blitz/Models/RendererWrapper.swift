@@ -23,24 +23,45 @@ extension Buffer {
     }
 }
 
-extension RawImage {
-    func toNSImage() -> NSImage {
-        let data = self.data.toData()
+// Extremely hot garbage: use this to hold a ref to a Data object within an NSImage.
+class BridgeRawBitmapImageRep : NSBitmapImageRep {
+    
+    let data: Data
+    let bufferWhatsits: [UnsafeMutablePointer<UInt8>?]
+    
+    init?(data: Data, pixelFormat: ImageFormat, width: Int, height: Int) {
+        // Hold a ref to the data so it doesn't magically break sometime
+        self.data = data
+        
         // TODO: this will all break if we introduce another format; but I don't know swift well enough to mess around with preventing this yet.
-        let samplesPerPixel = self.pixel_format == Rgb ? 3 : 4
-        let hasAlpha = self.pixel_format == Rgba
+        let samplesPerPixel = pixelFormat == Rgb ? 3 : 4
+        let hasAlpha = pixelFormat == Rgba
         let bitsPerSample = 8
         let bitsPerPixel = bitsPerSample * samplesPerPixel
         
-        let rep = data.withUnsafeBytes { (bytes) -> NSBitmapImageRep in
+        
+        self.bufferWhatsits = data.withUnsafeBytes { (bytes) -> [UnsafeMutablePointer<UInt8>?] in
             let imgptr = UnsafeMutablePointer(mutating: bytes.bindMemory(to: UInt8.self).baseAddress)
-            let wut = [imgptr]
-            return wut.withUnsafeBufferPointer { (arrayPtr) -> NSBitmapImageRep in
-                let dataPlanes = UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
-                return NSBitmapImageRep(bitmapDataPlanes: dataPlanes, pixelsWide: Int(self.width), pixelsHigh: Int(self.height), bitsPerSample: bitsPerSample, samplesPerPixel: samplesPerPixel, hasAlpha: hasAlpha, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: Int(self.width)*samplesPerPixel, bitsPerPixel: bitsPerPixel)!
-            }
+            return [imgptr]
         }
+        
+        let dataPlanes = self.bufferWhatsits.withUnsafeBufferPointer { (arrayPtr) -> UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>? in
+            return UnsafeMutablePointer(mutating: arrayPtr.baseAddress!)
+        }
+        super.init(bitmapDataPlanes: dataPlanes, pixelsWide: width, pixelsHigh: height, bitsPerSample: bitsPerSample, samplesPerPixel: samplesPerPixel, hasAlpha: hasAlpha, isPlanar: false, colorSpaceName: .calibratedRGB, bitmapFormat: NSBitmapImageRep.Format(), bytesPerRow: Int(width)*samplesPerPixel, bitsPerPixel: bitsPerPixel)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+}
+
+extension RawImage {
+    func toNSImage() -> NSImage {
+        let data = self.data.toData()
         let img = NSImage()
+        let rep = BridgeRawBitmapImageRep(data: data, pixelFormat: self.pixel_format, width: Int(self.width), height: Int(self.height))!
         img.addRepresentation(rep)
         return img
     }
