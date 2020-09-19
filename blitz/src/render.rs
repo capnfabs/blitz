@@ -5,13 +5,14 @@ extern crate nalgebra as na;
 use crate::camera_specific_junk::dng_cam2_to_xyz;
 use crate::common::Pixel;
 use crate::demosaic::{Demosaic, Nearest};
-use crate::levels::{cam_to_hsl, hsl_to_rgb, make_black_sub_task};
+use crate::levels::{cam_to_hsl, cam_to_hsv, make_black_sub_task, to_rgb};
 use crate::render_settings::RenderSettings;
 use crate::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
 use crate::vignette_correction;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
+use palette::{Hsl, Hsv, Shade};
 
 pub fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     render_raw_with_settings(img, &Default::default())
@@ -45,8 +46,13 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         blue: pixel.blue * scale_factors[2],
     };
 
-    let apply_curve_floats =
-        |pixel: f32| settings.tone_curve.spline.clamped_sample(pixel).unwrap() * pixel;
+    let apply_curve = |pixel: &Hsv| {
+        let val = pixel.value;
+        let factor = settings.tone_curve.spline.clamped_sample(val).unwrap();
+        let mut ret = pixel.clone();
+        ret.value *= factor;
+        ret
+    };
 
     let clamp = |pixel: &Pixel<_>| Pixel {
         red: float_clamp(pixel.red),
@@ -54,6 +60,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         blue: float_clamp(pixel.blue),
     };
     let convert_to_hsl = |pixel: &Pixel<_>| cam_to_hsl(&matrix, pixel);
+    let convert_to_hsv = |pixel: &Pixel<_>| cam_to_hsv(&matrix, pixel);
 
     // Run steps
     // This is the "operating on single values" phase.
@@ -62,7 +69,6 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         let val = black_sub(x, y, val);
         let val = convert_to_float(x, y, val);
         let val = val * (settings.exposure_basis);
-        let val = apply_curve_floats(val);
         val
     });
 
@@ -70,10 +76,10 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     let img = par_index_map_raiso(&img.view(), |x, y, data: &ArrayView2<_>| {
         let val = Nearest::demosaic(data, &mapping, x, y);
         let val = apply_wb(&val);
-        let val = clamp(&val);
-        let val = convert_to_hsl(&val);
-        //let val = apply_curve(&val);
-        let val = hsl_to_rgb(&val);
+        //let val = clamp(&val);
+        let val = convert_to_hsv(&val);
+        let val = apply_curve(&val);
+        let val = to_rgb(&val);
         val
     });
 
