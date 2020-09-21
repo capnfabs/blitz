@@ -5,6 +5,7 @@ use image::{imageops, DynamicImage, ImageFormat};
 use blitz::diagnostics::histogram::ToHistogram;
 
 use blitz::render;
+use blitz::render_settings::RenderSettings;
 use blitzbin::diagnostics::TermImage;
 use blitzbin::pathutils;
 use libraw::raf::RafFile;
@@ -45,7 +46,7 @@ fn load_and_maybe_render(img_file: &str, flags: &Flags) {
     println!("Parsed.");
 
     let raw_preview_filename = pathutils::get_output_path("native");
-    let rendered = render::render_raw(&details);
+    let rendered = render::render_raw_with_settings(&details, &RenderSettings::auto());
     if flags.stats {
         println!("Stats");
         let img = rendered.histogram().to_img(256, 128);

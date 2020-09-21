@@ -53,6 +53,7 @@ pub struct RenderSettings {
     pub tone_curve: ToneCurve,
     pub exposure_basis: f32,
     pub auto_contrast: bool,
+    pub saturation_boost: f32,
 }
 
 impl Default for RenderSettings {
@@ -60,8 +61,23 @@ impl Default for RenderSettings {
         RenderSettings {
             tone_curve: ToneCurve::default(),
             exposure_basis: 1.0,
-            // TODO: this should not be the default
+            auto_contrast: false,
+            saturation_boost: 0.,
+        }
+    }
+}
+
+impl RenderSettings {
+    /// These are default settings that result in automatic "nice" adjustments.
+    /// Long term, it would be better to not have 'auto' settings, but to have
+    /// an analysis step and a settings apply step, and the analysis step could
+    /// make settings that are nice for the image.
+    pub fn auto() -> Self {
+        RenderSettings {
+            tone_curve: ToneCurve::default(),
+            exposure_basis: 1.0,
             auto_contrast: true,
+            saturation_boost: 0.2,
         }
     }
 }

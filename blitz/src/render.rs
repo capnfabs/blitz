@@ -80,6 +80,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     });
 
     let img = if settings.auto_contrast {
+        // collect information
         let mut hist = hdrhistogram::Histogram::<u32>::new(3).unwrap();
         for pix in img.view() {
             hist.record((pix.value * std::u32::MAX as f32) as u64)
@@ -101,10 +102,12 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         val_at(0.99);
         val_at(1.);
 
-        // apply auto-contrast-stretching
         let s_min = hist.value_at_quantile(0.05) as f32 / std::u32::MAX as f32;
         let s_max = hist.value_at_quantile(0.95) as f32 / std::u32::MAX as f32;
 
+        // apply auto-contrast-stretching
+        // TODO: I think this is wrong and doesn't account for the log/lin boundary sufficiently.
+        // It depends on what the Hsv type is doing.
         par_index_map_siso(&img.view(), |_x, _y, mut val: Hsv<_>| {
             val.value = (val.value - s_min) / (s_max - s_min);
             val
@@ -113,7 +116,10 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         img
     };
 
-    let img = par_index_map_siso(&img.view(), |_x, _y, val: Hsv<_>| to_rgb(&val));
+    let img = par_index_map_siso(&img.view(), |_x, _y, mut val: Hsv<_>| {
+        val.saturation += settings.saturation_boost;
+        to_rgb(&val)
+    });
 
     // Last step: crop and convert.
     let (output_width, output_height) = ri.crop_rect.size();
