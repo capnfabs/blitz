@@ -26,6 +26,8 @@ impl RenderSettings {
         brs::RenderSettings {
             tone_curve: tc,
             exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
+            // TODO: set this dynamically
+            auto_contrast: true,
         }
     }
 }

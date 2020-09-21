@@ -1,18 +1,21 @@
+extern crate nalgebra as na;
+
 use image::ImageBuffer;
 use itertools::Itertools;
-use libraw::raf::ParsedRafFile;
-extern crate nalgebra as na;
-use crate::camera_specific_junk::dng_cam2_to_xyz;
-use crate::common::Pixel;
-use crate::demosaic::{Demosaic, Nearest};
-use crate::levels::{cam_to_hsl, cam_to_hsv, make_black_sub_task, to_rgb};
-use crate::render_settings::RenderSettings;
-use crate::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
-use crate::vignette_correction;
 use ndarray::prelude::*;
 use ndarray::Array2;
 use ordered_float::NotNan;
-use palette::{Hsl, Hsv, Shade};
+use palette::Hsv;
+
+use libraw::raf::ParsedRafFile;
+
+use crate::camera_specific_junk::dng_cam2_to_xyz;
+use crate::common::Pixel;
+use crate::demosaic::{Demosaic, Nearest};
+use crate::levels::{cam_to_hsv, make_black_sub_task, to_rgb};
+use crate::render_settings::RenderSettings;
+use crate::tasks::{par_index_map_raiso, par_index_map_siso, SingleInputSingleOutput};
+use crate::vignette_correction;
 
 pub fn render_raw(img: &ParsedRafFile) -> image::RgbImage {
     render_raw_with_settings(img, &Default::default())
@@ -54,12 +57,6 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
         ret
     };
 
-    let clamp = |pixel: &Pixel<_>| Pixel {
-        red: float_clamp(pixel.red),
-        green: float_clamp(pixel.green),
-        blue: float_clamp(pixel.blue),
-    };
-    let convert_to_hsl = |pixel: &Pixel<_>| cam_to_hsl(&matrix, pixel);
     let convert_to_hsv = |pixel: &Pixel<_>| cam_to_hsv(&matrix, pixel);
 
     // Run steps
@@ -76,12 +73,47 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     let img = par_index_map_raiso(&img.view(), |x, y, data: &ArrayView2<_>| {
         let val = Nearest::demosaic(data, &mapping, x, y);
         let val = apply_wb(&val);
-        //let val = clamp(&val);
+        // NOTE: we used to clamp here, but it looks like we don't need it anymore because we're
+        // round-tripping through HSV?
         let val = convert_to_hsv(&val);
-        let val = apply_curve(&val);
-        let val = to_rgb(&val);
         val
     });
+
+    let img = if settings.auto_contrast {
+        let mut hist = hdrhistogram::Histogram::<u32>::new(3).unwrap();
+        for pix in img.view() {
+            hist.record((pix.value * std::u32::MAX as f32) as u64)
+                .unwrap();
+        }
+
+        let val_at = |quant| {
+            println!(
+                "  {:4}%: {}",
+                (quant * 100.) as u32,
+                hist.value_at_quantile(quant) as f32 / std::u32::MAX as f32
+            );
+        };
+        val_at(0.);
+        val_at(0.01);
+        val_at(0.05);
+        val_at(0.5);
+        val_at(0.95);
+        val_at(0.99);
+        val_at(1.);
+
+        // apply auto-contrast-stretching
+        let s_min = hist.value_at_quantile(0.05) as f32 / std::u32::MAX as f32;
+        let s_max = hist.value_at_quantile(0.95) as f32 / std::u32::MAX as f32;
+
+        par_index_map_siso(&img.view(), |_x, _y, mut val: Hsv<_>| {
+            val.value = (val.value - s_min) / (s_max - s_min);
+            val
+        })
+    } else {
+        img
+    };
+
+    let img = par_index_map_siso(&img.view(), |_x, _y, val: Hsv<_>| to_rgb(&val));
 
     // Last step: crop and convert.
     let (output_width, output_height) = ri.crop_rect.size();
@@ -95,20 +127,6 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
 
     println!("Done rendering");
     buf
-}
-
-fn float_clamp(val: f32) -> f32 {
-    let min = 0.0;
-    let max = 1.0;
-    assert!(min <= max);
-    let mut x = val;
-    if x < min {
-        x = min;
-    }
-    if x > max {
-        x = max;
-    }
-    x
 }
 
 trait Sized {

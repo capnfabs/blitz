@@ -52,6 +52,7 @@ impl Default for ToneCurve {
 pub struct RenderSettings {
     pub tone_curve: ToneCurve,
     pub exposure_basis: f32,
+    pub auto_contrast: bool,
 }
 
 impl Default for RenderSettings {
@@ -59,6 +60,8 @@ impl Default for RenderSettings {
         RenderSettings {
             tone_curve: ToneCurve::default(),
             exposure_basis: 1.0,
+            // TODO: this should not be the default
+            auto_contrast: true,
         }
     }
 }
