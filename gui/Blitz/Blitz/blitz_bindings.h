@@ -30,6 +30,8 @@ typedef struct {
 typedef struct {
   float tone_curve[5];
   float exposure_basis;
+  bool auto_contrast;
+  float saturation_boost;
 } RenderSettings;
 
 void free_buffer(Buffer buf);

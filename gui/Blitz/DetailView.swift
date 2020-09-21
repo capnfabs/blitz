@@ -67,6 +67,8 @@ struct RenderControlsView: View {
     let onUpdateClicked: (RenderSettings) -> Void;
     
     @State var exposure: Double = 0
+    @State var saturation: Double = 0.1
+    @State var autoContrast: Bool = true
     
     @State var curve0: Double = 0
     @State var curve1: Double = 0
@@ -78,7 +80,7 @@ struct RenderControlsView: View {
         VStack {
             Button(action: {
                 let tone_curve = (Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))
-                let rs = RenderSettings(tone_curve: tone_curve, exposure_basis: Float(self.exposure))
+                let rs = RenderSettings(tone_curve: tone_curve, exposure_basis: Float(self.exposure), auto_contrast: autoContrast, saturation_boost: Float(saturation))
                 self.onUpdateClicked(rs)
                 
             }){
@@ -87,6 +89,14 @@ struct RenderControlsView: View {
             HStack {
                 Text("Baseline Exposure: \(self.exposure)")
                 SlideyBoi(value: $exposure, min:-5, max:5)
+            }
+            HStack {
+                Text("Saturation:")
+                Text("(\(saturation * 100, specifier: "%+2.0f")%)")
+                SlideyBoi(value: $saturation, min: -1, max:1)
+            }
+            HStack {
+                Toggle("Auto Contrast", isOn: $autoContrast).toggleStyle(SwitchToggleStyle())
             }
             HStack {
                 Text("Tone Curve")

@@ -4,6 +4,8 @@ use blitz::render_settings as brs;
 pub struct RenderSettings {
     tone_curve: [f32; 5],
     exposure_basis: f32,
+    auto_contrast: bool,
+    saturation_boost: f32,
 }
 
 const TONE_CURVE_CONST: f32 = 2.0;
@@ -26,8 +28,8 @@ impl RenderSettings {
         brs::RenderSettings {
             tone_curve: tc,
             exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
-            auto_contrast: true,
-            saturation_boost: 0.2,
+            auto_contrast: self.auto_contrast,
+            saturation_boost: self.saturation_boost,
         }
     }
 }
