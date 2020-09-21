@@ -118,6 +118,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
 
     let img = par_index_map_siso(&img.view(), |_x, _y, mut val: Hsv<_>| {
         val.saturation += settings.saturation_boost;
+        val.saturation = val.saturation.max(0.).min(1.);
         to_rgb(&val)
     });
 
