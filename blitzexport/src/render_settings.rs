@@ -1,4 +1,5 @@
 use blitz::render_settings as brs;
+use blitz::render_settings::LensCorrections;
 
 #[repr(C)]
 pub struct RenderSettings {
@@ -6,6 +7,7 @@ pub struct RenderSettings {
     exposure_basis: f32,
     auto_contrast: bool,
     saturation_boost: f32,
+    vignette_correction: bool,
 }
 
 const TONE_CURVE_CONST: f32 = 2.0;
@@ -30,6 +32,9 @@ impl RenderSettings {
             exposure_basis: TONE_CURVE_CONST.powf(self.exposure_basis),
             auto_contrast: self.auto_contrast,
             saturation_boost: self.saturation_boost,
+            lens_corrections: LensCorrections {
+                vignette: self.vignette_correction,
+            },
         }
     }
 }

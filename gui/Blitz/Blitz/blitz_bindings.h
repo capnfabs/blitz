@@ -32,6 +32,7 @@ typedef struct {
   float exposure_basis;
   bool auto_contrast;
   float saturation_boost;
+  bool vignette_correction;
 } RenderSettings;
 
 void free_buffer(Buffer buf);

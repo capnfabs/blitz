@@ -69,6 +69,7 @@ struct RenderControlsView: View {
     @State var exposure: Double = 0
     @State var saturation: Double = 0.1
     @State var autoContrast: Bool = true
+    @State var devignette: Bool = false
     
     @State var curve0: Double = 0
     @State var curve1: Double = 0
@@ -80,7 +81,7 @@ struct RenderControlsView: View {
         VStack {
             Button(action: {
                 let tone_curve = (Float(self.curve0), Float(self.curve1), Float(self.curve2), Float(self.curve3), Float(self.curve4))
-                let rs = RenderSettings(tone_curve: tone_curve, exposure_basis: Float(self.exposure), auto_contrast: autoContrast, saturation_boost: Float(saturation))
+                let rs = RenderSettings(tone_curve: tone_curve, exposure_basis: Float(self.exposure), auto_contrast: autoContrast, saturation_boost: Float(saturation), vignette_correction: devignette)
                 self.onUpdateClicked(rs)
                 
             }){
@@ -116,6 +117,10 @@ struct RenderControlsView: View {
                 SlideyBoi(value: $curve2, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve3, vertical: true, min:-5, max:5)
                 SlideyBoi(value: $curve4, vertical: true, min:-5, max:5)
+            }
+            VStack {
+                Text("Lens Corrections")
+                Toggle("Devignette", isOn: $devignette).toggleStyle(SwitchToggleStyle())
             }
         }
     }

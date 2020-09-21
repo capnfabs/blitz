@@ -54,6 +54,12 @@ pub struct RenderSettings {
     pub exposure_basis: f32,
     pub auto_contrast: bool,
     pub saturation_boost: f32,
+    pub lens_corrections: LensCorrections,
+}
+
+#[derive(Debug, Clone)]
+pub struct LensCorrections {
+    pub vignette: bool,
 }
 
 impl Default for RenderSettings {
@@ -63,6 +69,7 @@ impl Default for RenderSettings {
             exposure_basis: 1.0,
             auto_contrast: false,
             saturation_boost: 0.,
+            lens_corrections: LensCorrections { vignette: false },
         }
     }
 }
@@ -78,6 +85,7 @@ impl RenderSettings {
             exposure_basis: 1.0,
             auto_contrast: true,
             saturation_boost: 0.2,
+            lens_corrections: LensCorrections { vignette: true },
         }
     }
 }

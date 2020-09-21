@@ -40,7 +40,7 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     let matrix = dng_cam2_to_xyz();
 
     // Define steps
-    //let devignette = make_devignetter(img);
+    let devignette = make_devignetter(img);
     let black_sub = make_black_sub_task(ri.black_levels.clone());
     let convert_to_float = |_: usize, _: usize, val: u16| val as f32 / max;
     let apply_wb = move |pixel: &Pixel<f32>| Pixel {
@@ -62,7 +62,11 @@ pub fn render_raw_with_settings(img: &ParsedRafFile, settings: &RenderSettings) 
     // Run steps
     // This is the "operating on single values" phase.
     let img = par_index_map_siso(&src, |x, y, val| {
-        //let val = devignette(x, y, val);
+        let val = if settings.lens_corrections.vignette {
+            devignette(x, y, val)
+        } else {
+            val
+        };
         let val = black_sub(x, y, val);
         let val = convert_to_float(x, y, val);
         let val = val * (settings.exposure_basis);
